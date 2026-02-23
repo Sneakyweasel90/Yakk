@@ -7,7 +7,7 @@ function createWindow() {
     height: 750,
     minWidth: 800,
     minHeight: 600,
-    frame: false,          // removes default Windows titlebar (we'll make our own)
+    frame: false,          // removes default Windows titlebar
     backgroundColor: "#1a1a2e",
     icon: path.join(__dirname, "public/icon.png"),
     webPreferences: {

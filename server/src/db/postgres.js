@@ -6,7 +6,6 @@ const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// Run this once to set up your tables
 export async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (

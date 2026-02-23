@@ -3,7 +3,7 @@ const CHANNELS = ["general", "random", "yakking"];
 export default function Sidebar({ channel, setChannel, logout, username }) {
   return (
     <div style={styles.sidebar}>
-      <div style={styles.logo}>🦆 Yakk</div>
+      <div style={styles.logo}>Yakk</div>
       <div style={styles.section}>Channels</div>
       {CHANNELS.map((ch) => (
         <div

@@ -12,12 +12,12 @@ export function useWebSocket(token, onMessage) {
 
     ws.current.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      //console.log("📨 Received:", data);
+      //console.log("Received:", data);
       onMessage(data);
     };
 
     ws.current.onclose = () => {
-      //console.log("❌ Disconnected, reconnecting in 2s...");
+      //console.log("Disconnected, reconnecting in 2s...");
       setTimeout(connect, 2000);
     };
   }, [token, onMessage]);
