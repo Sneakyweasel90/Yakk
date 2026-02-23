@@ -83,7 +83,7 @@ export default function Chat() {
 
 const styles = {
   layout: { display: "flex", flexDirection: "column", height: "100vh", background: "#1a1a2e", color: "#fff" },
-  body: { display: "flex", flex: 1, overflow: "hidden" },
+  body: { display: "flex", flex: 1, overflow: "hidden", minWidth: 0 },
   main: { flex: 1, display: "flex", flexDirection: "column" },
   header: { padding: "1rem 1.5rem", background: "#16213e", borderBottom: "1px solid #0f3460" },
   channelName: { fontWeight: "bold", fontSize: "1.1rem", color: "#e94560" },

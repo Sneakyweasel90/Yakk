@@ -1,7 +1,7 @@
 export default function TitleBar() {
   return (
     <div style={styles.titlebar}>
-      <span style={styles.title}>🦆 Yakk</span>
+      <span style={styles.title}>Yakk</span>
       <div style={styles.controls}>
         <button style={styles.btn} onClick={() => window.electronAPI?.minimize()}>─</button>
         <button style={styles.btn} onClick={() => window.electronAPI?.maximize()}>□</button>

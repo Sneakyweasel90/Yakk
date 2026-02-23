@@ -38,7 +38,7 @@ export function initWebSocket(server) {
   wss.on("connection", async (ws, req) => {
   const token = new URL(req.url, "http://localhost").searchParams.get("token");
   //console.log("🔑 Token received:", token);
-  //const user = verifyWsToken(token);
+  const user = verifyWsToken(token);
   //console.log("👤 User:", user);
 
   if (!user) {
