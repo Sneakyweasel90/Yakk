@@ -37,12 +37,12 @@ export function initWebSocket(server) {
 
   wss.on("connection", async (ws, req) => {
   const token = new URL(req.url, "http://localhost").searchParams.get("token");
-  console.log("🔑 Token received:", token);  // add this
-  const user = verifyWsToken(token);
-  console.log("👤 User:", user);  // add this
+  //console.log("🔑 Token received:", token);
+  //const user = verifyWsToken(token);
+  //console.log("👤 User:", user);
 
   if (!user) {
-    console.log("❌ Auth failed, closing");  // add this
+    console.log("❌ Auth failed, closing");
     ws.close(1008, "Unauthorized");
     return;
   }
@@ -50,7 +50,7 @@ export function initWebSocket(server) {
     ws.user = user;
     ws.channels = new Set();
 
-    console.log(`🔌 ${user.username} connected`);
+    //console.log(`🔌 ${user.username} connected`);
 
     // Track presence
     await redis.sAdd("online_users", String(user.id));

@@ -15,31 +15,38 @@ export default function Chat() {
   const typingTimers = useRef({});
 
   const handleMessage = useCallback((data) => {
-    if (data.type === "history") {
-      setMessages(data.messages);
-    }
-    if (data.type === "message") {
-      setMessages((prev) => [...prev, data.message]);
-    }
-    if (data.type === "typing") {
-      setTypers((prev) => ({ ...prev, [data.userId]: data.username }));
-      clearTimeout(typingTimers.current[data.userId]);
-      typingTimers.current[data.userId] = setTimeout(() => {
-        setTypers((prev) => {
-          const next = { ...prev };
-          delete next[data.userId];
-          return next;
-        });
-      }, 3000);
-    }
-  }, []);
+  if (data.type === "history") {
+    setMessages(data.messages); // replaces, not appends
+  }
+  if (data.type === "message") {
+    setMessages((prev) => {
+      // prevent duplicate messages by checking id
+      if (prev.find((m) => m.id === data.message.id)) return prev;
+      return [...prev, data.message];
+    });
+  }
+  if (data.type === "typing") {
+    setTypers((prev) => ({ ...prev, [data.userId]: data.username }));
+    clearTimeout(typingTimers.current[data.userId]);
+    typingTimers.current[data.userId] = setTimeout(() => {
+      setTypers((prev) => {
+        const next = { ...prev };
+        delete next[data.userId];
+        return next;
+      });
+    }, 3000);
+  }
+}, []);
 
   const { send } = useWebSocket(user.token, handleMessage);
 
   useEffect(() => {
     setMessages([]);
-    send({ type: "join", channelId: channel });
-  }, [channel, send]);
+    const timeout = setTimeout(() => {
+        send({ type: "join", channelId: channel });
+    }, 100);
+    return () => clearTimeout(timeout);
+}, [channel, send]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
