@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Chat from "./components/Chat";
@@ -11,21 +12,16 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <HashRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Chat />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </HashRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <HashRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+          </Routes>
+        </HashRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
