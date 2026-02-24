@@ -1,5 +1,7 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
+
+let win;
 
 function createWindow() {
   win = new BrowserWindow({
@@ -8,7 +10,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     frame: false,
-    backgroundColor: "#1a1a2e",
+    backgroundColor: "#020a06",
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -18,16 +20,25 @@ function createWindow() {
 
   if (process.env.NODE_ENV === "development") {
     win.loadURL("http://localhost:5173");
+    win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(__dirname, "dist/index.html"));
   }
 
-  // Always open devtools so we can see errors
-  win.webContents.openDevTools();
+  // Allow microphone access
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === "media") {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
 }
 
-app.whenReady().then(createWindow);
+// Window controls
+ipcMain.on("minimize", () => win.minimize());
+ipcMain.on("maximize", () => win.isMaximized() ? win.unmaximize() : win.maximize());
+ipcMain.on("close", () => win.close());
 
-app.on("window-all-closed", () => {
-  app.quit();
-});
+app.whenReady().then(createWindow);
+app.on("window-all-closed", () => app.quit());
