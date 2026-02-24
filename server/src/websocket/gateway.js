@@ -36,7 +36,7 @@ export function initWebSocket(server) {
   const wss = new WebSocketServer({ server });
 
   wss.on("connection", async (ws, req) => {
-  const token = new URL(req.url, "http://localhost").searchParams.get("token");
+  const token = new URL(req.url, "http://192.168.0.30:4000").searchParams.get("token");
   //console.log("Token received:", token);
   const user = verifyWsToken(token);
   //console.log("User:", user);
@@ -107,18 +107,91 @@ export function initWebSocket(server) {
           username: user.username,
         }, ws); // exclude sender
       }
-    });
+
+      // VOICE - join channel
+if (msg.type === "voice_join") {
+  const { channelId } = msg;
+  ws.voiceChannel = channelId;
+
+  if (!channels.has(`voice:${channelId}`)) channels.set(`voice:${channelId}`, new Set());
+  const voiceClients = channels.get(`voice:${channelId}`);
+
+  // Tell the new user who's already in the channel
+  const existingUsers = [...voiceClients].map((c) => ({
+    userId: c.user.id,
+    username: c.user.username,
+  }));
+  ws.send(JSON.stringify({ type: "voice_participants", usernames: existingUsers.map(u => u.username) }));
+
+  // Tell everyone else someone joined
+  for (const client of voiceClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: "voice_user_joined",
+        userId: user.id,
+        username: user.username,
+      }));
+    }
+  }
+
+  voiceClients.add(ws);
+}
+
+// VOICE - leave channel
+if (msg.type === "voice_leave") {
+  if (ws.voiceChannel) {
+    const voiceClients = channels.get(`voice:${ws.voiceChannel}`);
+    voiceClients?.delete(ws);
+
+    // Tell others they left
+    for (const client of voiceClients || []) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: "voice_user_left",
+          userId: user.id,
+          username: user.username,
+        }));
+      }
+    }
+    ws.voiceChannel = null;
+  }
+}
+
+// VOICE - WebRTC signaling (offer, answer, ICE)
+      if (["voice_offer", "voice_answer", "voice_ice"].includes(msg.type)) {
+        const { targetUserId } = msg;
+        for (const client of wss.clients) {
+          if (client.user?.id === targetUserId && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ ...msg, userId: user.id }));
+            break;
+          }
+        }
+      }
+
+    }); // closes ws.on("message")
 
     ws.on("close", async () => {
-      // Remove from all channels
       for (const channelId of ws.channels) {
         channels.get(channelId)?.delete(ws);
       }
-      // Remove presence
+      if (ws.voiceChannel) {
+        const voiceClients = channels.get(`voice:${ws.voiceChannel}`);
+        voiceClients?.delete(ws);
+        for (const client of voiceClients || []) {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: "voice_user_left",
+              userId: user.id,
+              username: user.username,
+            }));
+          }
+        }
+      }
       await redis.sRem("online_users", String(user.id));
-      console.log(`${user.username} disconnected`);
-    });
-  });
+    }); // closes ws.on("close")
 
-  console.log("WebSocket gateway ready");
+  }); // closes wss.on("connection")
+
+  console.log("✅ WebSocket gateway ready");
+
 }

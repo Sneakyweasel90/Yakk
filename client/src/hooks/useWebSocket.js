@@ -1,13 +1,13 @@
 import { useEffect, useRef, useCallback } from "react";
+import config from "../config";
 
 export function useWebSocket(token, onMessage) {
   const ws = useRef(null);
 
   const connect = useCallback(() => {
-    ws.current = new WebSocket(`ws://localhost:4000?token=${token}`);
-
+    ws.current = new WebSocket(`${config.WS}?token=${token}`);
     ws.current.onopen = () => {
-      console.log("🔌 Yakk connected");
+      console.log("Yakk connected");
     };
 
     ws.current.onmessage = (e) => {
