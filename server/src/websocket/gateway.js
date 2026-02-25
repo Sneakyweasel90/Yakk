@@ -3,22 +3,16 @@ import { verifyWsToken } from "../middleware/auth.js";
 import db from "../db/postgres.js";
 import redis from "../redis/redisClient.js";
 
-// Map of channelId -> Set of WebSocket clients
 const channels = new Map();
 
-// Simple per-user rate limiting
 const msgCounts = new Map();
 function isRateLimited(userId) {
   const now = Date.now();
   const entry = msgCounts.get(userId) || { count: 0, reset: now + 10000 };
-
-  if (now > entry.reset) {
-    entry.count = 0;
-    entry.reset = now + 10000;
-  }
+  if (now > entry.reset) { entry.count = 0; entry.reset = now + 10000; }
   entry.count++;
   msgCounts.set(userId, entry);
-  return entry.count > 20; // max 20 msgs per 10 seconds
+  return entry.count > 20;
 }
 
 function broadcast(channelId, data, excludeWs = null) {
@@ -32,6 +26,28 @@ function broadcast(channelId, data, excludeWs = null) {
   }
 }
 
+// Broadcast online user list to ALL connected clients
+async function broadcastPresence(wss) {
+  const onlineIds = await redis.sMembers("online_users");
+  if (onlineIds.length === 0) {
+    const payload = JSON.stringify({ type: "presence", users: [] });
+    for (const client of wss.clients) {
+      if (client.readyState === WebSocket.OPEN) client.send(payload);
+    }
+    return;
+  }
+
+  // Fetch usernames for online ids
+  const { rows } = await db.query(
+    `SELECT id, username FROM users WHERE id = ANY($1::int[])`,
+    [onlineIds.map(Number)]
+  );
+  const payload = JSON.stringify({ type: "presence", users: rows });
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN) client.send(payload);
+  }
+}
+
 export function initWebSocket(server) {
   const wss = new WebSocketServer({ server });
 
@@ -40,7 +56,6 @@ export function initWebSocket(server) {
     const user = verifyWsToken(token);
 
     if (!user) {
-      console.log("Auth failed, closing");
       ws.close(1008, "Unauthorized");
       return;
     }
@@ -48,14 +63,15 @@ export function initWebSocket(server) {
     ws.user = user;
     ws.channels = new Set();
 
-    // Track presence
     await redis.sAdd("online_users", String(user.id));
+    // Broadcast updated presence to everyone
+    await broadcastPresence(wss);
 
     ws.on("message", async (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
-      // JOIN a channel — sends last 50 messages
+      // JOIN a channel
       if (msg.type === "join") {
         const { channelId } = msg;
         if (!channels.has(channelId)) channels.set(channelId, new Set());
@@ -70,18 +86,15 @@ export function initWebSocket(server) {
           [channelId]
         );
         const messages = rows.reverse();
-        const hasMore = rows.length === 50;
-
         ws.send(JSON.stringify({
           type: "history",
           messages,
-          hasMore,
-          // oldest message id for cursor-based pagination
+          hasMore: rows.length === 50,
           oldestId: messages.length > 0 ? messages[0].id : null,
         }));
       }
 
-      // LOAD MORE — cursor-based pagination (scroll up)
+      // LOAD MORE
       if (msg.type === "load_more") {
         const { channelId, beforeId } = msg;
         if (!channelId || !beforeId) return;
@@ -94,12 +107,10 @@ export function initWebSocket(server) {
           [channelId, beforeId]
         );
         const messages = rows.reverse();
-        const hasMore = rows.length === 50;
-
         ws.send(JSON.stringify({
           type: "history_prepend",
           messages,
-          hasMore,
+          hasMore: rows.length === 50,
           oldestId: messages.length > 0 ? messages[0].id : null,
         }));
       }
@@ -110,7 +121,6 @@ export function initWebSocket(server) {
           ws.send(JSON.stringify({ type: "error", message: "Rate limited" }));
           return;
         }
-
         const { channelId, content } = msg;
         if (!content?.trim()) return;
 
@@ -119,101 +129,69 @@ export function initWebSocket(server) {
            VALUES ($1, $2, $3, $4) RETURNING *`,
           [channelId, user.id, user.username, content.trim()]
         );
-
-        const saved = rows[0];
-        broadcast(channelId, { type: "message", message: saved });
+        broadcast(channelId, { type: "message", message: rows[0] });
       }
 
-      // TYPING indicator
+      // TYPING
       if (msg.type === "typing") {
-        const { channelId } = msg;
-        broadcast(channelId, {
-          type: "typing",
-          userId: user.id,
-          username: user.username,
-        }, ws);
+        broadcast(msg.channelId, { type: "typing", userId: user.id, username: user.username }, ws);
       }
 
-      // VOICE - join channel
+      // VOICE join
       if (msg.type === "voice_join") {
         const { channelId } = msg;
         ws.voiceChannel = channelId;
-
         if (!channels.has(`voice:${channelId}`)) channels.set(`voice:${channelId}`, new Set());
         const voiceClients = channels.get(`voice:${channelId}`);
-
-        const existingUsers = [...voiceClients].map((c) => ({
-          userId: c.user.id,
-          username: c.user.username,
+        ws.send(JSON.stringify({
+          type: "voice_participants",
+          usernames: [...voiceClients].map(c => c.user.username),
         }));
-        ws.send(JSON.stringify({ type: "voice_participants", usernames: existingUsers.map(u => u.username) }));
-
         for (const client of voiceClients) {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: "voice_user_joined",
-              userId: user.id,
-              username: user.username,
-            }));
-          }
+          if (client.readyState === WebSocket.OPEN)
+            client.send(JSON.stringify({ type: "voice_user_joined", userId: user.id, username: user.username }));
         }
-
         voiceClients.add(ws);
       }
 
-      // VOICE - leave channel
+      // VOICE leave
       if (msg.type === "voice_leave") {
         if (ws.voiceChannel) {
           const voiceClients = channels.get(`voice:${ws.voiceChannel}`);
           voiceClients?.delete(ws);
-
           for (const client of voiceClients || []) {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify({
-                type: "voice_user_left",
-                userId: user.id,
-                username: user.username,
-              }));
-            }
+            if (client.readyState === WebSocket.OPEN)
+              client.send(JSON.stringify({ type: "voice_user_left", userId: user.id, username: user.username }));
           }
           ws.voiceChannel = null;
         }
       }
 
-      // VOICE - WebRTC signaling
+      // VOICE signaling
       if (["voice_offer", "voice_answer", "voice_ice"].includes(msg.type)) {
-        const { targetUserId } = msg;
         for (const client of wss.clients) {
-          if (client.user?.id === targetUserId && client.readyState === WebSocket.OPEN) {
+          if (client.user?.id === msg.targetUserId && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ ...msg, userId: user.id }));
             break;
           }
         }
       }
-
-    }); // closes ws.on("message")
+    });
 
     ws.on("close", async () => {
-      for (const channelId of ws.channels) {
-        channels.get(channelId)?.delete(ws);
-      }
+      for (const channelId of ws.channels) channels.get(channelId)?.delete(ws);
       if (ws.voiceChannel) {
-        const voiceClients = channels.get(`voice:${ws.voiceChannel}`);
-        voiceClients?.delete(ws);
-        for (const client of voiceClients || []) {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: "voice_user_left",
-              userId: user.id,
-              username: user.username,
-            }));
-          }
+        const vc = channels.get(`voice:${ws.voiceChannel}`);
+        vc?.delete(ws);
+        for (const client of vc || []) {
+          if (client.readyState === WebSocket.OPEN)
+            client.send(JSON.stringify({ type: "voice_user_left", userId: user.id, username: user.username }));
         }
       }
       await redis.sRem("online_users", String(user.id));
+      await broadcastPresence(wss);
     });
+  });
 
-  }); // closes wss.on("connection")
-
-  console.log("✅ WebSocket gateway ready");
+  console.log("WebSocket gateway ready");
 }

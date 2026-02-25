@@ -1,5 +1,3 @@
-// Shared types across the Yakk client
-
 export interface User {
   id: number;
   username: string;
@@ -14,7 +12,6 @@ export interface Message {
   username: string;
   content: string;
   created_at: string;
-  // client-only: set after decryption
   decrypted?: boolean;
 }
 
@@ -22,13 +19,35 @@ export interface GroupedMessage extends Message {
   isGrouped: boolean;
 }
 
-// WebSocket message types sent from server → client
+export interface Channel {
+  id: number;
+  name: string;
+  type: "text" | "voice";
+  created_by: number | null;
+  created_at: string;
+}
+
+export interface OnlineUser {
+  id: number;
+  username: string;
+}
+
+export interface SearchResult {
+  id: number;
+  channel_id: string;
+  username: string;
+  content: string;
+  created_at: string;
+}
+
+// WebSocket messages server → client
 export type ServerMessage =
   | { type: "history"; messages: Message[]; hasMore: boolean; oldestId: number | null }
   | { type: "history_prepend"; messages: Message[]; hasMore: boolean; oldestId: number | null }
   | { type: "message"; message: Message }
   | { type: "typing"; userId: number; username: string }
   | { type: "error"; message: string }
+  | { type: "presence"; users: OnlineUser[] }
   | { type: "voice_participants"; usernames: string[] }
   | { type: "voice_user_joined"; userId: number; username: string }
   | { type: "voice_user_left"; userId: number; username: string }
@@ -36,7 +55,7 @@ export type ServerMessage =
   | { type: "voice_answer"; userId: number; answer: RTCSessionDescriptionInit; targetUserId: number }
   | { type: "voice_ice"; userId: number; candidate: RTCIceCandidateInit; targetUserId: number };
 
-// WebSocket message types sent client → server
+// WebSocket messages client → server
 export type ClientMessage =
   | { type: "join"; channelId: string }
   | { type: "load_more"; channelId: string; beforeId: number }

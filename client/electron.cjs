@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, Notification } = require("electron");
 const path = require("path");
 
 let win;
@@ -25,20 +25,22 @@ function createWindow() {
     win.loadFile(path.join(__dirname, "dist/index.html"));
   }
 
-  // Allow microphone access
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === "media") {
-      callback(true);
-    } else {
-      callback(false);
-    }
+    if (permission === "media") callback(true);
+    else callback(false);
   });
 }
 
-// Window controls
 ipcMain.on("minimize", () => win.minimize());
 ipcMain.on("maximize", () => win.isMaximized() ? win.unmaximize() : win.maximize());
 ipcMain.on("close", () => win.close());
+
+// Desktop notifications — only fires when window is not focused
+ipcMain.on("notify", (event, { title, body }) => {
+  if (win && !win.isFocused() && Notification.isSupported()) {
+    new Notification({ title, body, silent: false }).show();
+  }
+});
 
 app.whenReady().then(createWindow);
 app.on("window-all-closed", () => app.quit());

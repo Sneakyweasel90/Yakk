@@ -16,6 +16,14 @@ export async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS channels (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(50) UNIQUE NOT NULL,
+      type VARCHAR(10) NOT NULL DEFAULT 'text',
+      created_by INT REFERENCES users(id),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id SERIAL PRIMARY KEY,
       channel_id VARCHAR(100) NOT NULL,
@@ -34,10 +42,23 @@ export async function initDB() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_content_search ON messages USING gin(to_tsvector('english', content));
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
   `);
-  console.log("✅ DB tables ready");
+
+  // Seed default channels if none exist
+  await pool.query(`
+    INSERT INTO channels (name, type) VALUES
+      ('general', 'text'),
+      ('random', 'text'),
+      ('yakking', 'text'),
+      ('voice-general', 'voice'),
+      ('voice-chill', 'voice')
+    ON CONFLICT (name) DO NOTHING;
+  `);
+
+  console.log("DB tables ready");
 }
 
 export default pool;

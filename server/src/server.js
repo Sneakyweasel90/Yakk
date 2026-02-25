@@ -5,6 +5,8 @@ import http from "http";
 import { initDB } from "./db/postgres.js";
 import authRoutes, { cleanupExpiredTokens } from "./routes/auth.routes.js";
 import usersRoutes from "./routes/users.routes.js";
+import channelsRoutes from "./routes/channels.routes.js";
+import searchRoutes from "./routes/search.routes.js";
 import { initWebSocket } from "./websocket/gateway.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 
@@ -17,14 +19,14 @@ app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/channels", channelsRoutes);
+app.use("/api/search", searchRoutes);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 
-// Boot
 await initDB();
 initWebSocket(server);
 
-// Clean up expired refresh tokens every hour
 setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
 
 const PORT = process.env.PORT || 4000;
