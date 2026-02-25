@@ -7,6 +7,7 @@ const pool = new pg.Pool({
 });
 
 export async function initDB() {
+  // Create tables
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -47,6 +48,15 @@ export async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
   `);
 
+  // Safe migrations — add columns that may not exist on older installs
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS public_key TEXT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_encrypted BOOLEAN DEFAULT FALSE;
+  `);
+
   // Seed default channels if none exist
   await pool.query(`
     INSERT INTO channels (name, type) VALUES
@@ -58,7 +68,7 @@ export async function initDB() {
     ON CONFLICT (name) DO NOTHING;
   `);
 
-  console.log("DB tables ready");
+  console.log("✅ DB tables ready");
 }
 
 export default pool;

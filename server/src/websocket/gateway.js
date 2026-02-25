@@ -26,10 +26,27 @@ function broadcast(channelId, data, excludeWs = null) {
   }
 }
 
-// Broadcast online user list to ALL connected clients
+// Derive presence from live WS connections rather than trusting Redis alone.
+// This means even ungraceful disconnects are handled correctly.
 async function broadcastPresence(wss) {
-  const onlineIds = await redis.sMembers("online_users");
-  if (onlineIds.length === 0) {
+  // Collect user IDs that actually have an open connection right now
+  const liveUserIds = new Set();
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN && client.user?.id) {
+      liveUserIds.add(String(client.user.id));
+    }
+  }
+
+  // Sync Redis to match reality
+  const redisIds = await redis.sMembers("online_users");
+  for (const id of redisIds) {
+    if (!liveUserIds.has(id)) await redis.sRem("online_users", id);
+  }
+  for (const id of liveUserIds) {
+    await redis.sAdd("online_users", id);
+  }
+
+  if (liveUserIds.size === 0) {
     const payload = JSON.stringify({ type: "presence", users: [] });
     for (const client of wss.clients) {
       if (client.readyState === WebSocket.OPEN) client.send(payload);
@@ -37,10 +54,9 @@ async function broadcastPresence(wss) {
     return;
   }
 
-  // Fetch usernames for online ids
   const { rows } = await db.query(
     `SELECT id, username FROM users WHERE id = ANY($1::int[])`,
-    [onlineIds.map(Number)]
+    [[...liveUserIds].map(Number)]
   );
   const payload = JSON.stringify({ type: "presence", users: rows });
   for (const client of wss.clients) {
@@ -48,7 +64,11 @@ async function broadcastPresence(wss) {
   }
 }
 
-export function initWebSocket(server) {
+export async function initWebSocket(server) {
+  // Clear stale presence data from any previous server run
+  await redis.del("online_users");
+  console.log("✅ Cleared stale online_users from Redis");
+
   const wss = new WebSocketServer({ server });
 
   wss.on("connection", async (ws, req) => {
@@ -64,14 +84,12 @@ export function initWebSocket(server) {
     ws.channels = new Set();
 
     await redis.sAdd("online_users", String(user.id));
-    // Broadcast updated presence to everyone
     await broadcastPresence(wss);
 
     ws.on("message", async (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
-      // JOIN a channel
       if (msg.type === "join") {
         const { channelId } = msg;
         if (!channels.has(channelId)) channels.set(channelId, new Set());
@@ -94,7 +112,6 @@ export function initWebSocket(server) {
         }));
       }
 
-      // LOAD MORE
       if (msg.type === "load_more") {
         const { channelId, beforeId } = msg;
         if (!channelId || !beforeId) return;
@@ -115,7 +132,6 @@ export function initWebSocket(server) {
         }));
       }
 
-      // SEND a message
       if (msg.type === "message") {
         if (isRateLimited(user.id)) {
           ws.send(JSON.stringify({ type: "error", message: "Rate limited" }));
@@ -132,12 +148,10 @@ export function initWebSocket(server) {
         broadcast(channelId, { type: "message", message: rows[0] });
       }
 
-      // TYPING
       if (msg.type === "typing") {
         broadcast(msg.channelId, { type: "typing", userId: user.id, username: user.username }, ws);
       }
 
-      // VOICE join
       if (msg.type === "voice_join") {
         const { channelId } = msg;
         ws.voiceChannel = channelId;
@@ -154,7 +168,6 @@ export function initWebSocket(server) {
         voiceClients.add(ws);
       }
 
-      // VOICE leave
       if (msg.type === "voice_leave") {
         if (ws.voiceChannel) {
           const voiceClients = channels.get(`voice:${ws.voiceChannel}`);
@@ -167,7 +180,6 @@ export function initWebSocket(server) {
         }
       }
 
-      // VOICE signaling
       if (["voice_offer", "voice_answer", "voice_ice"].includes(msg.type)) {
         for (const client of wss.clients) {
           if (client.user?.id === msg.targetUserId && client.readyState === WebSocket.OPEN) {
@@ -193,5 +205,5 @@ export function initWebSocket(server) {
     });
   });
 
-  console.log("WebSocket gateway ready");
+  console.log("✅ WebSocket gateway ready");
 }

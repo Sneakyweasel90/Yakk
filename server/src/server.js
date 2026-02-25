@@ -25,9 +25,9 @@ app.use("/api/search", searchRoutes);
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 
 await initDB();
-initWebSocket(server);
+await initWebSocket(server);
 
 setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => console.log(`Yakk server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🦆 Yakk server running on port ${PORT}`));

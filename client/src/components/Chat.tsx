@@ -29,6 +29,8 @@ export default function Chat() {
   const typingTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const prevScrollHeightRef = useRef(0);
   const currentChannelRef = useRef(channel);
+  // Track whether the next history load should instantly jump to bottom
+  const jumpToBottomRef = useRef(true);
 
   useEffect(() => { currentChannelRef.current = channel; }, [channel]);
 
@@ -44,11 +46,23 @@ export default function Chat() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  const scrollToBottom = useCallback((instant = false) => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    if (instant) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
   const handleMessage = useCallback((data: ServerMessage) => {
     if (data.type === "history") {
       setMessages(data.messages);
       setHasMore(data.hasMore);
       setOldestId(data.oldestId);
+      // Will jump to bottom instantly after render via the effect below
+      jumpToBottomRef.current = true;
     }
 
     if (data.type === "history_prepend") {
@@ -99,20 +113,35 @@ export default function Chat() {
   const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, handleVoiceMessage } =
     useVoice(send, user!.id);
 
+  // On channel switch: clear messages and request new history
   useEffect(() => {
     setMessages([]);
     setHasMore(false);
     setOldestId(null);
+    jumpToBottomRef.current = true;
     const t = setTimeout(() => send({ type: "join", channelId: channel }), 100);
     return () => clearTimeout(t);
   }, [channel, send]);
 
-  // Scroll to bottom on new messages (skip when loading older)
+  // After messages render: jump to bottom (instant on channel switch/history load,
+  // smooth for new incoming messages)
   useEffect(() => {
-    if (!loadingMore) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loadingMore]);
+    if (loadingMore) return; // don't interfere with pagination scroll restore
 
-  // Restore scroll after prepend
+    if (jumpToBottomRef.current) {
+      // Instant jump — channel switch or initial load
+      scrollToBottom(true);
+      jumpToBottomRef.current = false;
+    } else {
+      // Smooth scroll for new message arriving while already at bottom
+      const el = messagesContainerRef.current;
+      if (!el) return;
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      if (isNearBottom) scrollToBottom(false);
+    }
+  }, [messages, loadingMore, scrollToBottom]);
+
+  // Restore scroll position after prepending older messages
   useEffect(() => {
     if (prevScrollHeightRef.current > 0 && messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop =
@@ -130,11 +159,8 @@ export default function Chat() {
     }
   }, [hasMore, loadingMore, oldestId, channel, send]);
 
-  // Jump to a message from search result — switch channel then scroll
   const handleJumpTo = useCallback((channelId: string, _messageId: number) => {
     setChannel(channelId);
-    // After channel switch, messages reload; we don't scroll to a specific message yet
-    // (full jump-to requires storing a target message id — future enhancement)
   }, []);
 
   const groupedMessages: GroupedMessage[] = messages.reduce<GroupedMessage[]>((acc, msg, i) => {
@@ -170,7 +196,6 @@ export default function Chat() {
             <span style={{ color: theme.textDim }}>#</span>
             <span style={{ ...styles.channelName, color: theme.primary }}>{channel}</span>
             <div style={{ ...styles.headerLine, background: `linear-gradient(90deg, ${theme.border}, transparent)` }} />
-            {/* Online count in header */}
             <span style={{ ...styles.headerOnline, color: theme.textDim }}>
               <span style={{ color: "#4ade80", marginRight: "4px" }}>●</span>
               {onlineUsers.length} online
@@ -194,11 +219,9 @@ export default function Chat() {
 
             {groupedMessages.map(msg => (
               <div key={msg.id} style={{ ...styles.msgRow, paddingTop: msg.isGrouped ? "0.1rem" : "0.65rem" }}>
-                {/* Avatar column */}
                 <div style={styles.avatarCol}>
                   {!msg.isGrouped && <Avatar username={msg.username} size={34} />}
                 </div>
-                {/* Content column */}
                 <div style={styles.msgBody}>
                   {!msg.isGrouped && (
                     <div style={styles.msgHeader}>
@@ -238,6 +261,19 @@ export default function Chat() {
           onClose={() => setShowSearch(false)}
         />
       )}
+
+      {/* Themed scrollbar — updates whenever theme changes */}
+      <style>{`
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+          background: ${theme.primaryDim};
+          border-radius: 2px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: ${theme.primary};
+        }
+      `}</style>
     </div>
   );
 }
