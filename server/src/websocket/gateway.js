@@ -26,25 +26,18 @@ function broadcast(channelId, data, excludeWs = null) {
   }
 }
 
-// Derive presence from live WS connections rather than trusting Redis alone.
-// This means even ungraceful disconnects are handled correctly.
 async function broadcastPresence(wss) {
-  // Collect user IDs that actually have an open connection right now
   const liveUserIds = new Set();
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN && client.user?.id) {
       liveUserIds.add(String(client.user.id));
     }
   }
-
-  // Sync Redis to match reality
   const redisIds = await redis.sMembers("online_users");
   for (const id of redisIds) {
     if (!liveUserIds.has(id)) await redis.sRem("online_users", id);
   }
-  for (const id of liveUserIds) {
-    await redis.sAdd("online_users", id);
-  }
+  for (const id of liveUserIds) await redis.sAdd("online_users", id);
 
   if (liveUserIds.size === 0) {
     const payload = JSON.stringify({ type: "presence", users: [] });
@@ -64,10 +57,48 @@ async function broadcastPresence(wss) {
   }
 }
 
+// Fetch reaction counts for a message, returns array of {emoji, count, users}
+async function getReactions(messageId) {
+  const { rows } = await db.query(
+    `SELECT r.emoji,
+            COUNT(*)::int AS count,
+            array_agg(u.username) AS users
+     FROM reactions r
+     JOIN users u ON r.user_id = u.id
+     WHERE r.message_id = $1
+     GROUP BY r.emoji
+     ORDER BY MIN(r.created_at)`,
+    [messageId]
+  );
+  return rows;
+}
+
+// Attach reactions to an array of messages
+async function attachReactions(messages) {
+  if (messages.length === 0) return messages;
+  const ids = messages.map(m => m.id);
+  const { rows } = await db.query(
+    `SELECT r.message_id, r.emoji,
+            COUNT(*)::int AS count,
+            array_agg(u.username) AS users
+     FROM reactions r
+     JOIN users u ON r.user_id = u.id
+     WHERE r.message_id = ANY($1::int[])
+     GROUP BY r.message_id, r.emoji
+     ORDER BY MIN(r.created_at)`,
+    [ids]
+  );
+  // Group by message_id
+  const byMsg = {};
+  for (const row of rows) {
+    if (!byMsg[row.message_id]) byMsg[row.message_id] = [];
+    byMsg[row.message_id].push({ emoji: row.emoji, count: row.count, users: row.users });
+  }
+  return messages.map(m => ({ ...m, reactions: byMsg[m.id] || [] }));
+}
+
 export async function initWebSocket(server) {
-  // Clear stale presence data from any previous server run
   await redis.del("online_users");
-  console.log("✅ Cleared stale online_users from Redis");
 
   const wss = new WebSocketServer({ server });
 
@@ -75,10 +106,7 @@ export async function initWebSocket(server) {
     const token = new URL(req.url, "http://localhost:4000").searchParams.get("token");
     const user = verifyWsToken(token);
 
-    if (!user) {
-      ws.close(1008, "Unauthorized");
-      return;
-    }
+    if (!user) { ws.close(1008, "Unauthorized"); return; }
 
     ws.user = user;
     ws.channels = new Set();
@@ -90,6 +118,7 @@ export async function initWebSocket(server) {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
+      // JOIN
       if (msg.type === "join") {
         const { channelId } = msg;
         if (!channels.has(channelId)) channels.set(channelId, new Set());
@@ -103,7 +132,7 @@ export async function initWebSocket(server) {
            ORDER BY m.id DESC LIMIT 50`,
           [channelId]
         );
-        const messages = rows.reverse();
+        const messages = await attachReactions(rows.reverse());
         ws.send(JSON.stringify({
           type: "history",
           messages,
@@ -112,10 +141,10 @@ export async function initWebSocket(server) {
         }));
       }
 
+      // LOAD MORE
       if (msg.type === "load_more") {
         const { channelId, beforeId } = msg;
         if (!channelId || !beforeId) return;
-
         const { rows } = await db.query(
           `SELECT m.*, u.username FROM messages m
            JOIN users u ON m.user_id = u.id
@@ -123,7 +152,7 @@ export async function initWebSocket(server) {
            ORDER BY m.id DESC LIMIT 50`,
           [channelId, beforeId]
         );
-        const messages = rows.reverse();
+        const messages = await attachReactions(rows.reverse());
         ws.send(JSON.stringify({
           type: "history_prepend",
           messages,
@@ -132,6 +161,7 @@ export async function initWebSocket(server) {
         }));
       }
 
+      // SEND message
       if (msg.type === "message") {
         if (isRateLimited(user.id)) {
           ws.send(JSON.stringify({ type: "error", message: "Rate limited" }));
@@ -139,28 +169,61 @@ export async function initWebSocket(server) {
         }
         const { channelId, content } = msg;
         if (!content?.trim()) return;
-
         const { rows } = await db.query(
           `INSERT INTO messages (channel_id, user_id, username, content)
            VALUES ($1, $2, $3, $4) RETURNING *`,
           [channelId, user.id, user.username, content.trim()]
         );
-        broadcast(channelId, { type: "message", message: rows[0] });
+        broadcast(channelId, { type: "message", message: { ...rows[0], reactions: [] } });
       }
 
+      // REACT — toggle a reaction on a message
+      if (msg.type === "react") {
+        const { messageId, emoji } = msg;
+        if (!messageId || !emoji) return;
+
+        // Verify message exists and get its channel
+        const { rows: msgRows } = await db.query(
+          `SELECT channel_id FROM messages WHERE id = $1`, [messageId]
+        );
+        if (!msgRows[0]) return;
+        const channelId = msgRows[0].channel_id;
+
+        // Toggle: if user already reacted with this emoji, remove it; otherwise add it
+        const { rows: existing } = await db.query(
+          `SELECT id FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+          [messageId, user.id, emoji]
+        );
+
+        if (existing.length > 0) {
+          await db.query(
+            `DELETE FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+            [messageId, user.id, emoji]
+          );
+        } else {
+          await db.query(
+            `INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
+             ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+            [messageId, user.id, emoji]
+          );
+        }
+
+        const reactions = await getReactions(messageId);
+        broadcast(channelId, { type: "reaction_update", messageId, reactions });
+      }
+
+      // TYPING
       if (msg.type === "typing") {
         broadcast(msg.channelId, { type: "typing", userId: user.id, username: user.username }, ws);
       }
 
+      // VOICE join
       if (msg.type === "voice_join") {
         const { channelId } = msg;
         ws.voiceChannel = channelId;
         if (!channels.has(`voice:${channelId}`)) channels.set(`voice:${channelId}`, new Set());
         const voiceClients = channels.get(`voice:${channelId}`);
-        ws.send(JSON.stringify({
-          type: "voice_participants",
-          usernames: [...voiceClients].map(c => c.user.username),
-        }));
+        ws.send(JSON.stringify({ type: "voice_participants", usernames: [...voiceClients].map(c => c.user.username) }));
         for (const client of voiceClients) {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({ type: "voice_user_joined", userId: user.id, username: user.username }));
@@ -168,6 +231,7 @@ export async function initWebSocket(server) {
         voiceClients.add(ws);
       }
 
+      // VOICE leave
       if (msg.type === "voice_leave") {
         if (ws.voiceChannel) {
           const voiceClients = channels.get(`voice:${ws.voiceChannel}`);
@@ -180,6 +244,7 @@ export async function initWebSocket(server) {
         }
       }
 
+      // VOICE signaling
       if (["voice_offer", "voice_answer", "voice_ice"].includes(msg.type)) {
         for (const client of wss.clients) {
           if (client.user?.id === msg.targetUserId && client.readyState === WebSocket.OPEN) {

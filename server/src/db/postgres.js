@@ -7,7 +7,6 @@ const pool = new pg.Pool({
 });
 
 export async function initDB() {
-  // Create tables
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -34,6 +33,15 @@ export async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS reactions (
+      id SERIAL PRIMARY KEY,
+      message_id INT REFERENCES messages(id) ON DELETE CASCADE NOT NULL,
+      user_id INT REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+      emoji VARCHAR(10) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(message_id, user_id, emoji)
+    );
+
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       id SERIAL PRIMARY KEY,
       user_id INT REFERENCES users(id) ON DELETE CASCADE,
@@ -44,20 +52,15 @@ export async function initDB() {
 
     CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id, id DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_content_search ON messages USING gin(to_tsvector('english', content));
+    CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
   `);
 
-  // Safe migrations — add columns that may not exist on older installs
-  await pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS public_key TEXT;
-  `);
+  // Safe column migrations
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS public_key TEXT;`);
 
-  await pool.query(`
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_encrypted BOOLEAN DEFAULT FALSE;
-  `);
-
-  // Seed default channels if none exist
+  // Seed default channels
   await pool.query(`
     INSERT INTO channels (name, type) VALUES
       ('general', 'text'),

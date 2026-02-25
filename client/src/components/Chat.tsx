@@ -10,7 +10,95 @@ import TitleBar from "./TitleBar";
 import VoiceIndicator from "./VoiceIndicator";
 import Avatar from "./Avatar";
 import SearchOverlay from "./SearchOverlay";
-import type { GroupedMessage, Message, OnlineUser, ServerMessage } from "../types";
+import type { GroupedMessage, Message, OnlineUser, Reaction, ServerMessage } from "../types";
+
+const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+
+interface EmojiPickerProps {
+  messageId: number;
+  onReact: (messageId: number, emoji: string) => void;
+  onClose: () => void;
+  theme: Record<string, string>;
+}
+
+function EmojiPicker({ messageId, onReact, onClose, theme }: EmojiPickerProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: "absolute", top: "-44px", right: 0, zIndex: 100,
+        background: theme.surface, border: `1px solid ${theme.border}`,
+        borderRadius: "4px", padding: "4px 6px",
+        display: "flex", gap: "2px",
+        boxShadow: `0 4px 20px rgba(0,0,0,0.5)`,
+      }}
+    >
+      {QUICK_EMOJIS.map(emoji => (
+        <button
+          key={emoji}
+          onClick={() => { onReact(messageId, emoji); onClose(); }}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: "1.15rem", padding: "3px 5px", borderRadius: "3px",
+            transition: "background 0.1s",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = theme.primaryGlow)}
+          onMouseLeave={e => (e.currentTarget.style.background = "none")}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface ReactionPillsProps {
+  reactions: Reaction[];
+  messageId: number;
+  currentUsername: string;
+  onReact: (messageId: number, emoji: string) => void;
+  theme: Record<string, string>;
+}
+
+function ReactionPills({ reactions, messageId, currentUsername, onReact, theme }: ReactionPillsProps) {
+  if (reactions.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px" }}>
+      {reactions.map(r => {
+        const reacted = r.users.includes(currentUsername);
+        return (
+          <button
+            key={r.emoji}
+            onClick={() => onReact(messageId, r.emoji)}
+            title={r.users.join(", ")}
+            style={{
+              background: reacted ? theme.primaryGlow : "rgba(255,255,255,0.04)",
+              border: `1px solid ${reacted ? theme.primaryDim : theme.border}`,
+              borderRadius: "10px", padding: "1px 7px",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: "4px",
+              fontSize: "0.8rem", transition: "all 0.15s",
+            }}
+          >
+            <span>{r.emoji}</span>
+            <span style={{ color: reacted ? theme.primary : theme.textDim, fontSize: "0.7rem", fontFamily: "'Share Tech Mono', monospace" }}>
+              {r.count}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Chat() {
   const { user, logout } = useAuth();
@@ -23,18 +111,18 @@ export default function Chat() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [showSearch, setShowSearch] = useState(false);
+  const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
+  const [pickerMsgId, setPickerMsgId] = useState<number | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const typingTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const prevScrollHeightRef = useRef(0);
   const currentChannelRef = useRef(channel);
-  // Track whether the next history load should instantly jump to bottom
   const jumpToBottomRef = useRef(true);
 
   useEffect(() => { currentChannelRef.current = channel; }, [channel]);
 
-  // Ctrl+K to open search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -49,11 +137,8 @@ export default function Chat() {
   const scrollToBottom = useCallback((instant = false) => {
     const el = messagesContainerRef.current;
     if (!el) return;
-    if (instant) {
-      el.scrollTop = el.scrollHeight;
-    } else {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
+    if (instant) el.scrollTop = el.scrollHeight;
+    else bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   const handleMessage = useCallback((data: ServerMessage) => {
@@ -61,7 +146,6 @@ export default function Chat() {
       setMessages(data.messages);
       setHasMore(data.hasMore);
       setOldestId(data.oldestId);
-      // Will jump to bottom instantly after render via the effect below
       jumpToBottomRef.current = true;
     }
 
@@ -79,8 +163,6 @@ export default function Chat() {
         if (prev.find(m => m.id === data.message.id)) return prev;
         return [...prev, data.message];
       });
-
-      // Desktop notification if message is in a different channel and not from self
       if (
         data.message.channel_id !== currentChannelRef.current &&
         data.message.user_id !== user!.id
@@ -92,6 +174,12 @@ export default function Chat() {
       }
     }
 
+    if (data.type === "reaction_update") {
+      setMessages(prev =>
+        prev.map(m => m.id === data.messageId ? { ...m, reactions: data.reactions } : m)
+      );
+    }
+
     if (data.type === "typing") {
       setTypers(prev => ({ ...prev, [data.userId]: data.username }));
       clearTimeout(typingTimers.current[data.userId]);
@@ -100,20 +188,15 @@ export default function Chat() {
       }, 3000);
     }
 
-    if (data.type === "presence") {
-      setOnlineUsers(data.users);
-    }
+    if (data.type === "presence") setOnlineUsers(data.users);
 
-    if (data.type?.startsWith("voice_")) {
-      handleVoiceMessage(data);
-    }
+    if (data.type?.startsWith("voice_")) handleVoiceMessage(data);
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { send } = useWebSocket(user!.token, handleMessage);
   const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, handleVoiceMessage } =
     useVoice(send, user!.id);
 
-  // On channel switch: clear messages and request new history
   useEffect(() => {
     setMessages([]);
     setHasMore(false);
@@ -123,25 +206,18 @@ export default function Chat() {
     return () => clearTimeout(t);
   }, [channel, send]);
 
-  // After messages render: jump to bottom (instant on channel switch/history load,
-  // smooth for new incoming messages)
   useEffect(() => {
-    if (loadingMore) return; // don't interfere with pagination scroll restore
-
+    if (loadingMore) return;
     if (jumpToBottomRef.current) {
-      // Instant jump — channel switch or initial load
       scrollToBottom(true);
       jumpToBottomRef.current = false;
     } else {
-      // Smooth scroll for new message arriving while already at bottom
       const el = messagesContainerRef.current;
       if (!el) return;
-      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-      if (isNearBottom) scrollToBottom(false);
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) scrollToBottom(false);
     }
   }, [messages, loadingMore, scrollToBottom]);
 
-  // Restore scroll position after prepending older messages
   useEffect(() => {
     if (prevScrollHeightRef.current > 0 && messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop =
@@ -158,6 +234,10 @@ export default function Chat() {
       send({ type: "load_more", channelId: channel, beforeId: oldestId });
     }
   }, [hasMore, loadingMore, oldestId, channel, send]);
+
+  const handleReact = useCallback((messageId: number, emoji: string) => {
+    send({ type: "react", messageId, emoji });
+  }, [send]);
 
   const handleJumpTo = useCallback((channelId: string, _messageId: number) => {
     setChannel(channelId);
@@ -191,7 +271,6 @@ export default function Chat() {
         />
 
         <div style={styles.main}>
-          {/* Channel header */}
           <div style={{ ...styles.header, background: theme.surface, borderColor: theme.border }}>
             <span style={{ color: theme.textDim }}>#</span>
             <span style={{ ...styles.channelName, color: theme.primary }}>{channel}</span>
@@ -202,7 +281,6 @@ export default function Chat() {
             </span>
           </div>
 
-          {/* Messages */}
           <div ref={messagesContainerRef} style={styles.messages} onScroll={handleScroll}>
             <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
               {loadingMore && (
@@ -218,22 +296,56 @@ export default function Chat() {
             </div>
 
             {groupedMessages.map(msg => (
-              <div key={msg.id} style={{ ...styles.msgRow, paddingTop: msg.isGrouped ? "0.1rem" : "0.65rem" }}>
+              <div
+                key={msg.id}
+                style={{ ...styles.msgRow, paddingTop: msg.isGrouped ? "0.1rem" : "0.65rem" }}
+                onMouseEnter={() => setHoveredMsgId(msg.id)}
+                onMouseLeave={() => { setHoveredMsgId(null); setPickerMsgId(null); }}
+              >
                 <div style={styles.avatarCol}>
                   {!msg.isGrouped && <Avatar username={msg.username} size={34} />}
                 </div>
-                <div style={styles.msgBody}>
+                <div style={{ ...styles.msgBody, position: "relative" }}>
                   {!msg.isGrouped && (
                     <div style={styles.msgHeader}>
-                      <span style={{ ...styles.msgUsername, color: theme.primary }}>
-                        {msg.username}
-                      </span>
+                      <span style={{ ...styles.msgUsername, color: theme.primary }}>{msg.username}</span>
                       <span style={{ ...styles.msgTime, color: theme.textDim }}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
                   )}
                   <div style={{ ...styles.msgContent, color: theme.text }}>{msg.content}</div>
+
+                  <ReactionPills
+                    reactions={msg.reactions || []}
+                    messageId={msg.id}
+                    currentUsername={user!.username}
+                    onReact={handleReact}
+                    theme={theme as unknown as Record<string, string>}
+                  />
+
+                  {/* Hover action bar */}
+                  {hoveredMsgId === msg.id && (
+                    <div style={{ ...styles.actionBar, borderColor: theme.border, background: theme.surface }}>
+                      <button
+                        style={{ ...styles.actionBtn, color: theme.textDim }}
+                        onClick={() => setPickerMsgId(pickerMsgId === msg.id ? null : msg.id)}
+                        title="Add reaction"
+                      >
+                        😊
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Emoji picker */}
+                  {pickerMsgId === msg.id && (
+                    <EmojiPicker
+                      messageId={msg.id}
+                      onReact={handleReact}
+                      onClose={() => setPickerMsgId(null)}
+                      theme={theme as unknown as Record<string, string>}
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -262,17 +374,11 @@ export default function Chat() {
         />
       )}
 
-      {/* Themed scrollbar — updates whenever theme changes */}
       <style>{`
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb {
-          background: ${theme.primaryDim};
-          border-radius: 2px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: ${theme.primary};
-        }
+        ::-webkit-scrollbar-thumb { background: ${theme.primaryDim}; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${theme.primary}; }
       `}</style>
     </div>
   );
@@ -282,19 +388,26 @@ const styles: Record<string, React.CSSProperties> = {
   layout: { display: "flex", flexDirection: "column", height: "100vh", width: "100vw" },
   body: { display: "flex", flex: 1, overflow: "hidden" },
   main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 },
-  header: {
-    display: "flex", alignItems: "center", gap: "0.5rem",
-    padding: "0.75rem 1.5rem", borderBottom: "1px solid",
-  },
+  header: { display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.75rem 1.5rem", borderBottom: "1px solid" },
   channelName: { fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "1rem" },
   headerLine: { flex: 1, height: "1px" },
   headerOnline: { fontSize: "0.72rem", fontFamily: "'Share Tech Mono', monospace", flexShrink: 0 },
   messages: { flex: 1, overflowY: "auto", padding: "0 1rem 0.5rem" },
-  msgRow: { display: "flex", gap: "0.75rem", padding: "0 0.5rem" },
+  msgRow: { display: "flex", gap: "0.75rem", padding: "0 0.5rem", borderRadius: "3px" },
   avatarCol: { width: "34px", flexShrink: 0, display: "flex", alignItems: "flex-start", paddingTop: "2px" },
-  msgBody: { flex: 1, minWidth: 0 },
+  msgBody: { flex: 1, minWidth: 0, paddingRight: "2.5rem" },
   msgHeader: { display: "flex", alignItems: "baseline", gap: "0.6rem", marginBottom: "0.1rem" },
   msgUsername: { fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "0.9rem" },
   msgTime: { fontSize: "0.65rem", fontFamily: "'Share Tech Mono', monospace" },
   msgContent: { fontSize: "0.9rem", lineHeight: 1.5, wordBreak: "break-word" },
+  actionBar: {
+    position: "absolute", top: 0, right: 0,
+    border: "1px solid", borderRadius: "3px",
+    display: "flex", gap: "2px", padding: "1px 3px",
+  },
+  actionBtn: {
+    background: "none", border: "none", cursor: "pointer",
+    fontSize: "1rem", padding: "2px 4px", borderRadius: "2px",
+    lineHeight: 1,
+  },
 };
