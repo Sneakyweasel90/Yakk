@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import http from "http";
+import path from "path";
+import { fileURLToPath } from "url";
 import { initDB } from "./db/postgres.js";
 import authRoutes, { cleanupExpiredTokens } from "./routes/auth.routes.js";
 import usersRoutes from "./routes/users.routes.js";
@@ -9,6 +11,9 @@ import channelsRoutes from "./routes/channels.routes.js";
 import searchRoutes from "./routes/search.routes.js";
 import { initWebSocket } from "./websocket/gateway.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +28,15 @@ app.use("/api/channels", channelsRoutes);
 app.use("/api/search", searchRoutes);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
+
+// Serve React frontend in production
+const clientDist = path.join(__dirname, "../../client/dist");
+app.use(express.static(clientDist));
+
+// All non-API routes serve the React app
+app.get("*", (req, res) => {
+  res.sendFile(path.join(clientDist, "index.html"));
+});
 
 await initDB();
 await initWebSocket(server);
