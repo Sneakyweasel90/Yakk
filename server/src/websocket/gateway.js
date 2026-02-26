@@ -29,7 +29,8 @@ function broadcast(channelId, data, excludeWs = null) {
 async function broadcastPresence(wss) {
   const liveUserIds = new Set();
   for (const client of wss.clients) {
-    if (client.readyState === WebSocket.OPEN && client.user?.id) {
+    // Only count fully open connections — exclude CLOSING/CLOSED sockets
+    if (client.readyState === WebSocket.OPEN && !client._yakk_closed && client.user?.id) {
       liveUserIds.add(String(client.user.id));
     }
   }
@@ -48,7 +49,7 @@ async function broadcastPresence(wss) {
   }
 
   const { rows } = await db.query(
-    `SELECT id, username FROM users WHERE id = ANY($1::int[])`,
+    `SELECT id, COALESCE(nickname, username) AS username FROM users WHERE id = ANY($1::int[])`,
     [[...liveUserIds].map(Number)]
   );
   const payload = JSON.stringify({ type: "presence", users: rows });
@@ -169,10 +170,16 @@ export async function initWebSocket(server) {
         }
         const { channelId, content } = msg;
         if (!content?.trim()) return;
+        // Use nickname if set, otherwise fall back to username
+        const { rows: uRows } = await db.query(
+          `SELECT COALESCE(nickname, username) AS display_name FROM users WHERE id = $1`,
+          [user.id]
+        );
+        const displayName = uRows[0]?.display_name || user.username;
         const { rows } = await db.query(
           `INSERT INTO messages (channel_id, user_id, username, content)
            VALUES ($1, $2, $3, $4) RETURNING *`,
-          [channelId, user.id, user.username, content.trim()]
+          [channelId, user.id, displayName, content.trim()]
         );
         broadcast(channelId, { type: "message", message: { ...rows[0], reactions: [] } });
       }
@@ -256,6 +263,8 @@ export async function initWebSocket(server) {
     });
 
     ws.on("close", async () => {
+      // Mark this socket as closed immediately before presence broadcast
+      ws._yakk_closed = true;
       for (const channelId of ws.channels) channels.get(channelId)?.delete(ws);
       if (ws.voiceChannel) {
         const vc = channels.get(`voice:${ws.voiceChannel}`);
@@ -266,7 +275,9 @@ export async function initWebSocket(server) {
         }
       }
       await redis.sRem("online_users", String(user.id));
+      // Broadcast immediately, then again after a tick to catch any race with CLOSING state
       await broadcastPresence(wss);
+      setTimeout(() => broadcastPresence(wss), 500);
     });
   });
 

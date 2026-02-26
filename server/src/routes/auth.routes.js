@@ -71,6 +71,7 @@ router.post("/login", async (req, res) => {
     token: accessToken,
     refreshToken,
     username: user.username,
+    nickname: user.nickname || null,
     id: user.id,
   });
 });

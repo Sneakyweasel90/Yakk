@@ -101,7 +101,10 @@ function ReactionPills({ reactions, messageId, currentUsername, onReact, theme }
 }
 
 export default function Chat() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateNickname, updateAvatar } = useAuth();
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
   const { theme } = useTheme();
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState("general");
@@ -111,7 +114,6 @@ export default function Chat() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [showSearch, setShowSearch] = useState(false);
-  const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
   const [pickerMsgId, setPickerMsgId] = useState<number | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -165,7 +167,7 @@ export default function Chat() {
       });
       if (
         data.message.channel_id !== currentChannelRef.current &&
-        data.message.user_id !== user!.id
+        data.message.user_id !== userRef.current!.id
       ) {
         window.electronAPI?.notify(
           `#${data.message.channel_id}`,
@@ -191,9 +193,16 @@ export default function Chat() {
     if (data.type === "presence") setOnlineUsers(data.users);
 
     if (data.type?.startsWith("voice_")) handleVoiceMessage(data);
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { send } = useWebSocket(user!.token, handleMessage);
+  const { send, disconnect } = useWebSocket(user!.token, handleMessage);
+
+  const handleLogout = useCallback(async () => {
+    disconnect();
+    // Small delay so the WS close reaches the server before we clear auth state
+    await new Promise(r => setTimeout(r, 200));
+    await logout();
+  }, [disconnect, logout]);
   const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, handleVoiceMessage } =
     useVoice(send, user!.id);
 
@@ -263,11 +272,16 @@ export default function Chat() {
           voiceChannel={voiceChannel}
           joinVoice={joinVoice}
           leaveVoice={leaveVoice}
-          logout={logout}
+          logout={handleLogout}
           username={user!.username}
+          nickname={user!.nickname ?? null}
+          userId={user!.id}
           token={user!.token}
           onlineUsers={onlineUsers}
           onSearchOpen={() => setShowSearch(true)}
+          avatar={user!.avatar ?? null}
+          onNicknameChange={updateNickname}
+          onAvatarChange={updateAvatar}
         />
 
         <div style={styles.main}>
@@ -299,8 +313,7 @@ export default function Chat() {
               <div
                 key={msg.id}
                 style={{ ...styles.msgRow, paddingTop: msg.isGrouped ? "0.1rem" : "0.65rem" }}
-                onMouseEnter={() => setHoveredMsgId(msg.id)}
-                onMouseLeave={() => { if (pickerMsgId !== msg.id) setHoveredMsgId(null); }}
+
               >
                 <div style={styles.avatarCol}>
                   {!msg.isGrouped && <Avatar username={msg.username} size={34} />}
@@ -316,36 +329,38 @@ export default function Chat() {
                   )}
                   <div style={{ ...styles.msgContent, color: theme.text }}>{msg.content}</div>
 
-                  <ReactionPills
-                    reactions={msg.reactions || []}
-                    messageId={msg.id}
-                    currentUsername={user!.username}
-                    onReact={handleReact}
-                    theme={theme as unknown as Record<string, string>}
-                  />
-
-                  {/* Hover action bar */}
-                  {hoveredMsgId === msg.id && (
-                    <div style={{ ...styles.actionBar, borderColor: theme.border, background: theme.surface }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                    <ReactionPills
+                      reactions={msg.reactions || []}
+                      messageId={msg.id}
+                      currentUsername={userRef.current!.nickname || userRef.current!.username}
+                      onReact={handleReact}
+                      theme={theme as unknown as Record<string, string>}
+                    />
+                    {/* Always-visible react button */}
+                    <div style={{ position: "relative" }}>
                       <button
-                        style={{ ...styles.actionBtn, color: theme.textDim }}
+                        style={{
+                          ...styles.reactBtn,
+                          color: pickerMsgId === msg.id ? theme.primary : theme.textDim,
+                          borderColor: pickerMsgId === msg.id ? theme.primaryDim : theme.border,
+                          background: pickerMsgId === msg.id ? theme.primaryGlow : "transparent",
+                        }}
                         onClick={() => setPickerMsgId(pickerMsgId === msg.id ? null : msg.id)}
                         title="Add reaction"
                       >
-                        😊
+                        + 😊
                       </button>
+                      {pickerMsgId === msg.id && (
+                        <EmojiPicker
+                          messageId={msg.id}
+                          onReact={handleReact}
+                          onClose={() => { setPickerMsgId(null); }}
+                          theme={theme as unknown as Record<string, string>}
+                        />
+                      )}
                     </div>
-                  )}
-
-                  {/* Emoji picker */}
-                  {pickerMsgId === msg.id && (
-                    <EmojiPicker
-                      messageId={msg.id}
-                      onReact={handleReact}
-                      onClose={() => { setPickerMsgId(null); setHoveredMsgId(null); }}
-                      theme={theme as unknown as Record<string, string>}
-                    />
-                  )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -400,14 +415,10 @@ const styles: Record<string, React.CSSProperties> = {
   msgUsername: { fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "0.9rem" },
   msgTime: { fontSize: "0.65rem", fontFamily: "'Share Tech Mono', monospace" },
   msgContent: { fontSize: "0.9rem", lineHeight: 1.5, wordBreak: "break-word" },
-  actionBar: {
-    position: "absolute", top: 0, right: 0,
-    border: "1px solid", borderRadius: "3px",
-    display: "flex", gap: "2px", padding: "1px 3px",
-  },
-  actionBtn: {
-    background: "none", border: "none", cursor: "pointer",
-    fontSize: "1rem", padding: "2px 4px", borderRadius: "2px",
-    lineHeight: 1,
+  reactBtn: {
+    background: "none", border: "1px solid", cursor: "pointer",
+    fontSize: "0.7rem", padding: "1px 6px", borderRadius: "10px",
+    fontFamily: "'Share Tech Mono', monospace", letterSpacing: "0.05em",
+    transition: "all 0.15s", lineHeight: "1.6",
   },
 };

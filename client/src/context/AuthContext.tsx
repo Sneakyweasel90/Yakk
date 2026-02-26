@@ -8,13 +8,13 @@ interface AuthContextValue {
   user: User | null;
   login: (userData: User) => Promise<void>;
   logout: () => Promise<void>;
+  updateNickname: (nickname: string | null) => void;
+  updateAvatar: (avatar: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// How many ms before expiry to proactively refresh (2 minutes)
 const REFRESH_BUFFER_MS = 2 * 60 * 1000;
-// Access token TTL matches server (15 minutes)
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -45,27 +45,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(updated);
       scheduleRefresh(updated);
     } catch {
-      // Refresh failed — session expired, force logout
       await logout();
     }
   }, [scheduleRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On mount, if there's a stored user, schedule a refresh immediately
-  // (token may already be near expiry after app restart)
   useEffect(() => {
-    if (user) {
-      // Refresh right away on startup to get a fresh token, then schedule future ones
-      doRefresh(user);
-    }
+    if (user) doRefresh(user);
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = useCallback(async (userData: User) => {
-    // Init E2E key pair and get public key to publish
     const publicKeyB64 = await e2eKeyStore.init();
-    // Store public key on server (fire & forget — best effort)
     try {
       await axios.post(
         `${config.HTTP}/api/users/public-key`,
@@ -73,10 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         { headers: { Authorization: `Bearer ${userData.token}` } }
       );
     } catch {
-      // Non-fatal — E2E for DMs will just be unavailable this session
       console.warn("Failed to publish E2E public key");
     }
-
     localStorage.setItem("yakk_user", JSON.stringify(userData));
     setUser(userData);
     scheduleRefresh(userData);
@@ -88,20 +78,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (stored) {
       const u: User = JSON.parse(stored);
       try {
-        await axios.post(`${config.HTTP}/api/auth/logout`, {
-          refreshToken: u.refreshToken,
-        });
-      } catch {
-        // Ignore — server-side cleanup is best effort
-      }
+        await axios.post(`${config.HTTP}/api/auth/logout`, { refreshToken: u.refreshToken });
+      } catch { /* best effort */ }
     }
     e2eKeyStore.clear();
     localStorage.removeItem("yakk_user");
     setUser(null);
   }, []);
 
+  // Called after a successful nickname update so UI reflects immediately
+  const updateAvatar = useCallback((avatar: string | null) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, avatar };
+      localStorage.setItem("yakk_user", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const updateNickname = useCallback((nickname: string | null) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, nickname };
+      localStorage.setItem("yakk_user", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateNickname, updateAvatar }}>
       {children}
     </AuthContext.Provider>
   );

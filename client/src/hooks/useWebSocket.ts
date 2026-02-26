@@ -7,7 +7,6 @@ export function useWebSocket(
   onMessage: (data: ServerMessage) => void
 ) {
   const ws = useRef<WebSocket | null>(null);
-  // Track the channel we're currently in so we can re-join after a reconnect
   const currentChannelRef = useRef<string | null>(null);
   const intentionalClose = useRef(false);
 
@@ -16,8 +15,6 @@ export function useWebSocket(
 
     ws.current.onopen = () => {
       console.log("Yakk connected");
-      // Re-join the current channel if we had one — this is what fixes
-      // the "messages not showing after idle" bug
       if (currentChannelRef.current) {
         ws.current!.send(
           JSON.stringify({ type: "join", channelId: currentChannelRef.current })
@@ -47,7 +44,6 @@ export function useWebSocket(
   }, [connect]);
 
   const send = useCallback((data: ClientMessage) => {
-    // Keep track of which channel we're in
     if (data.type === "join") {
       currentChannelRef.current = data.channelId;
     }
@@ -65,5 +61,13 @@ export function useWebSocket(
     }
   }, []);
 
-  return { send };
+  // Call this on logout to cleanly close the socket before clearing auth state,
+  // so the server fires onclose immediately and removes the user from Redis
+  const disconnect = useCallback(() => {
+    intentionalClose.current = true;
+    ws.current?.close();
+    ws.current = null;
+  }, []);
+
+  return { send, disconnect };
 }

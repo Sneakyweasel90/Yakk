@@ -3,6 +3,7 @@ import axios from "axios";
 import { useTheme } from "../context/ThemeContext";
 import ThemePicker from "./ThemePicker";
 import Avatar from "./Avatar";
+import AccountSettings from "./AccountSettings";
 import config from "../config";
 import type { Channel, OnlineUser } from "../types";
 
@@ -14,18 +15,24 @@ interface Props {
   leaveVoice: () => void;
   logout: () => void;
   username: string;
+  nickname: string | null;
+  avatar: string | null;
+  userId: number;
   token: string;
   onlineUsers: OnlineUser[];
   onSearchOpen: () => void;
+  onNicknameChange: (nickname: string | null) => void;
+  onAvatarChange: (avatar: string | null) => void;
 }
 
 export default function Sidebar({
   channel, setChannel, voiceChannel, joinVoice, leaveVoice,
-  logout, username, token, onlineUsers, onSearchOpen,
+  logout, username, nickname, avatar, userId, token, onlineUsers, onSearchOpen, onNicknameChange, onAvatarChange,
 }: Props) {
   const { theme } = useTheme();
   const [showThemes, setShowThemes] = useState(false);
   const [showOnline, setShowOnline] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [showCreateText, setShowCreateText] = useState(false);
   const [showCreateVoice, setShowCreateVoice] = useState(false);
@@ -262,14 +269,31 @@ export default function Sidebar({
 
       {/* Footer */}
       <div style={{ ...styles.footer, borderColor: theme.border }}>
-        <Avatar username={username} size={28} />
-        <span style={{ ...styles.usernameText, color: theme.text }}>{username}</span>
+        <div
+          onClick={() => setShowSettings(true)}
+          style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, cursor: "pointer", minWidth: 0 }}
+          title="Account settings"
+        >
+          <Avatar username={nickname || username} avatar={avatar} size={28} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ ...styles.usernameText, color: theme.text }}>{nickname || username}</div>
+            {nickname && <div style={{ fontSize: "0.6rem", color: theme.textDim, fontFamily: "'Share Tech Mono', monospace", opacity: 0.6 }}>@{username}</div>}
+          </div>
+        </div>
         <button onClick={logout} style={{ ...styles.logout, color: theme.textDim, borderColor: theme.border }}>
           EXIT
         </button>
       </div>
 
       {showThemes && <ThemePicker onClose={() => setShowThemes(false)} />}
+      {showSettings && (
+        <AccountSettings
+          user={{ id: userId, username, nickname, avatar, token }}
+          onClose={() => setShowSettings(false)}
+          onNicknameChange={(n) => { onNicknameChange(n); }}
+          onAvatarChange={(a) => { onAvatarChange(a); }}
+        />
+      )}
     </div>
   );
 }

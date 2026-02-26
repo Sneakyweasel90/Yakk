@@ -13,6 +13,7 @@ export async function initDB() {
       username VARCHAR(50) UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       public_key TEXT,
+      nickname VARCHAR(50),
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
@@ -57,10 +58,10 @@ export async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
   `);
 
-  // Safe column migrations
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS public_key TEXT;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname VARCHAR(50);`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;`);
 
-  // Seed default channels
   await pool.query(`
     INSERT INTO channels (name, type) VALUES
       ('general', 'text'),

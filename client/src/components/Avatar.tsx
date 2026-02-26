@@ -1,6 +1,5 @@
 import React from "react";
 
-// Generate a deterministic hue from a username string
 function usernameToHue(username: string): number {
   let hash = 0;
   for (let i = 0; i < username.length; i++) {
@@ -12,13 +11,36 @@ function usernameToHue(username: string): number {
 interface Props {
   username: string;
   size?: number;
+  avatar?: string | null; // base64 custom image
   style?: React.CSSProperties;
 }
 
-export default function Avatar({ username, size = 32, style }: Props) {
+export default function Avatar({ username, size = 32, avatar, style }: Props) {
   const hue = usernameToHue(username);
-  const bg = `hsl(${hue}, 55%, 28%)`;
   const border = `hsl(${hue}, 70%, 50%)`;
+
+  if (avatar) {
+    return (
+      <img
+        src={avatar}
+        alt={username}
+        title={username}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "4px",
+          border: `1px solid ${border}`,
+          objectFit: "cover",
+          flexShrink: 0,
+          display: "block",
+          boxShadow: `0 0 8px ${border}33`,
+          ...style,
+        }}
+      />
+    );
+  }
+
+  const bg = `hsl(${hue}, 55%, 28%)`;
   const text = `hsl(${hue}, 80%, 75%)`;
   const initials = username.slice(0, 2).toUpperCase();
 

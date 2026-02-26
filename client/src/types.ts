@@ -1,6 +1,8 @@
 export interface User {
   id: number;
   username: string;
+  nickname: string | null;
+  avatar: string | null;
   token: string;
   refreshToken: string;
 }
