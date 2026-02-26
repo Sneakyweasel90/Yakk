@@ -36,7 +36,7 @@ function EmojiPicker({ messageId, onReact, onClose, theme }: EmojiPickerProps) {
     <div
       ref={ref}
       style={{
-        position: "absolute", top: "-44px", right: 0, zIndex: 100,
+        position: "absolute", top: "-44px", left: 0, zIndex: 100,
         background: theme.surface, border: `1px solid ${theme.border}`,
         borderRadius: "4px", padding: "4px 6px",
         display: "flex", gap: "2px",
@@ -115,6 +115,7 @@ export default function Chat() {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [pickerMsgId, setPickerMsgId] = useState<number | null>(null);
+  const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -313,7 +314,8 @@ export default function Chat() {
               <div
                 key={msg.id}
                 style={{ ...styles.msgRow, paddingTop: msg.isGrouped ? "0.1rem" : "0.65rem" }}
-
+                onMouseEnter={() => setHoveredMsgId(msg.id)}
+                onMouseLeave={() => { if (pickerMsgId !== msg.id) setHoveredMsgId(null); }}
               >
                 <div style={styles.avatarCol}>
                   {!msg.isGrouped && <Avatar username={msg.username} size={34} />}
@@ -337,8 +339,8 @@ export default function Chat() {
                       onReact={handleReact}
                       theme={theme as unknown as Record<string, string>}
                     />
-                    {/* Always-visible react button */}
-                    <div style={{ position: "relative" }}>
+                    {/* React button — visible on hover or when picker is open */}
+                    {(hoveredMsgId === msg.id || pickerMsgId === msg.id) && <div style={{ position: "relative" }}>
                       <button
                         style={{
                           ...styles.reactBtn,
@@ -355,11 +357,11 @@ export default function Chat() {
                         <EmojiPicker
                           messageId={msg.id}
                           onReact={handleReact}
-                          onClose={() => { setPickerMsgId(null); }}
+                          onClose={() => { setPickerMsgId(null); setHoveredMsgId(null); }}
                           theme={theme as unknown as Record<string, string>}
                         />
                       )}
-                    </div>
+                    </div>}
                   </div>
                 </div>
               </div>
