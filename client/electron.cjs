@@ -100,9 +100,13 @@ async function checkForUpdates() {
             detail: "Click Install to run the installer now. Yakk will close.",
             buttons: ["Install Now", "Install Later"], defaultId: 0,
           });
-          if (installResponse === 0) shell.openPath(destPath);
-          else shell.showItemInFolder(destPath);
-          app.quit();
+          if (installResponse === 0) {
+            shell.openPath(destPath);
+            setTimeout(() => app.quit(), 2000);
+          } else {
+            shell.showItemInFolder(destPath);
+            app.quit();
+          }
           return false;
         } catch {
           progressWin.close();
