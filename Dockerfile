@@ -2,19 +2,14 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Build client
-COPY client/package*.json ./client/
-RUN cd client && npm install
+# Copy everything first
+COPY . .
 
-COPY client/ ./client/
-RUN cd client && npm run build
+# Build client
+RUN cd client && npm install && npm run build
 
 # Install server deps
-COPY server/package*.json ./server/
 RUN cd server && npm install
-
-# Copy server source
-COPY server/ ./server/
 
 EXPOSE 4000
 
