@@ -52,5 +52,6 @@ const styles = {
     width: "46px", height: "32px", border: "none",
     background: "transparent", cursor: "pointer",
     fontSize: "0.9rem", transition: "all 0.15s",
+    WebkitAppRegion: "no-drag",
   },
 };
