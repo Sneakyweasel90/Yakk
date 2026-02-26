@@ -9,7 +9,6 @@ const GITHUB_REPO = "Yakk";
 
 let win;
 
-// Log file in user's home directory
 const logPath = path.join(os.homedir(), "yakk-log.txt");
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -47,7 +46,7 @@ function getLatestRelease() {
   });
 }
 
-function downloadFile(url, destPath, progressWin) {
+function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
     const attempt = (downloadUrl) => {
       log("Attempting download from: " + downloadUrl);
@@ -59,16 +58,7 @@ function downloadFile(url, destPath, progressWin) {
         if (res.statusCode !== 200) {
           return reject(new Error(`HTTP ${res.statusCode} from download URL`));
         }
-        const totalBytes = parseInt(res.headers["content-length"] || "0");
-        let downloadedBytes = 0;
         const file = fs.createWriteStream(destPath);
-        res.on("data", (chunk) => {
-          downloadedBytes += chunk.length;
-          if (totalBytes > 0 && progressWin && !progressWin.isDestroyed()) {
-            progressWin.setProgressBar(downloadedBytes / totalBytes);
-            progressWin.setTitle(`Downloading update... ${Math.round((downloadedBytes / totalBytes) * 100)}%`);
-          }
-        });
         res.pipe(file);
         file.on("finish", () => { log("Download complete: " + destPath); file.close(resolve); });
         file.on("error", (e) => { log("File write error: " + e.message); reject(e); });
@@ -81,6 +71,7 @@ function downloadFile(url, destPath, progressWin) {
 async function checkForUpdates() {
   log("checkForUpdates started");
   if (process.env.NODE_ENV === "development") { log("Dev mode, skipping update check"); return true; }
+
   try {
     log("Fetching latest release...");
     const release = await getLatestRelease();
@@ -106,31 +97,45 @@ async function checkForUpdates() {
       });
 
       log("User response: " + response);
+
       if (response === 0 && downloadUrl) {
-      try {
-        const destPath = path.join(os.homedir(), "Downloads", `Yakk-Setup-${latestVersion}.exe`);
-        log("Saving to: " + destPath);
-        await downloadFile(downloadUrl, destPath, null);
-        log("Download finished, launching installer");
-        log("Opening with shell.openPath: " + destPath);
-        shell.openPath(destPath).then((result) => {
-          log("shell.openPath result: '" + result + "'");
-          // Delete the installer after launching it
-          setTimeout(() => {
-            try {
-              fs.unlinkSync(destPath);
-              log("Installer deleted: " + destPath);
-            } catch (e) {
-              log("Could not delete installer: " + e.message);
-            }
-          }, 5000);
-        });
-        await new Promise(r => setTimeout(r, 3000));
-        log("Quitting");
-        app.quit();
-        return false;
+        try {
+          const destPath = path.join(os.homedir(), "Downloads", `YakkSetup.exe`);
+          log("Saving to: " + destPath);
+          await downloadFile(downloadUrl, destPath);
+          log("Download finished, launching installer");
+          log("Opening with shell.openPath: " + destPath);
+          shell.openPath(destPath).then((result) => {
+            log("shell.openPath result: '" + result + "'");
+            setTimeout(() => {
+              try {
+                fs.unlinkSync(destPath);
+                log("Installer deleted: " + destPath);
+              } catch (e) {
+                log("Could not delete installer: " + e.message);
+              }
+            }, 5000);
+          });
+          await new Promise(r => setTimeout(r, 3000));
+          log("Quitting");
+          app.quit();
+          return false;
+        } catch (err) {
+          log("Download/install error: " + err.message);
+          await dialog.showMessageBox({
+            type: "error",
+            title: "Download Failed",
+            message: "Could not download update.",
+            detail: `Error: ${err.message}\n\nPlease visit GitHub to download manually.`,
+            buttons: ["Open GitHub", "Close"],
+            defaultId: 0,
+          }).then(({ response: r }) => {
+            if (r === 0) shell.openExternal(`https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`);
+          });
+          app.quit();
+          return false;
+        }
       }
-    }
 
       log("User chose Close, quitting");
       app.quit();
