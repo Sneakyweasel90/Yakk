@@ -3,7 +3,7 @@ import axios from "axios";
 import { useTheme } from "../context/ThemeContext";
 import ThemePicker from "./ThemePicker";
 import Avatar from "./Avatar";
-import AccountSettings from "./AccountSettings";
+import AccountSettings from "./Accountsettings";
 import config from "../config";
 import type { Channel, OnlineUser } from "../types";
 
