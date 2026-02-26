@@ -115,13 +115,18 @@ async function checkForUpdates() {
         log("Opening with shell.openPath: " + destPath);
         shell.openPath(destPath).then((result) => {
           log("shell.openPath result: '" + result + "'");
+          // Delete the installer after launching it
+          setTimeout(() => {
+            try {
+              fs.unlinkSync(destPath);
+              log("Installer deleted: " + destPath);
+            } catch (e) {
+              log("Could not delete installer: " + e.message);
+            }
+          }, 5000);
         });
         await new Promise(r => setTimeout(r, 3000));
         log("Quitting");
-        app.quit();
-        return false;
-      } catch (err) {
-        log("Error: " + err.message);
         app.quit();
         return false;
       }
