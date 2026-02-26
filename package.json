@@ -1,0 +1,8 @@
+{
+  "name": "yakk",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd client && npm install && npm run build && cd ../server && npm install",
+    "start": "cd server && node src/server.js"
+  }
+}
