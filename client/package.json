@@ -1,7 +1,7 @@
 {
   "name": "yakk",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
@@ -17,7 +17,8 @@
     "productName": "Yakk",
     "win": {
       "target": "nsis",
-      "icon": "public/icon.png"
+      "icon": "public/icon.png",
+      "artifactName": "YakkSetup.exe"
     },
     "files": [
       "dist/**/*",

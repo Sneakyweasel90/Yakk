@@ -9,6 +9,14 @@ const GITHUB_REPO = "Yakk";
 
 let win;
 
+// Log file in user's home directory
+const logPath = path.join(os.homedir(), "yakk-log.txt");
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  fs.appendFileSync(logPath, line);
+  console.log(msg);
+}
+
 function isNewerVersion(latest, current) {
   const latestParts = latest.replace(/^v/, "").split(".").map(Number);
   const currentParts = current.replace(/^v/, "").split(".").map(Number);
@@ -33,7 +41,7 @@ function getLatestRelease() {
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
         try { resolve(JSON.parse(data)); }
-        catch { reject(new Error("Failed to parse release data")); }
+        catch (e) { reject(new Error("Failed to parse release data: " + e.message)); }
       });
     }).on("error", reject);
   });
@@ -42,9 +50,14 @@ function getLatestRelease() {
 function downloadFile(url, destPath, progressWin) {
   return new Promise((resolve, reject) => {
     const attempt = (downloadUrl) => {
+      log("Attempting download from: " + downloadUrl);
       https.get(downloadUrl, { headers: { "User-Agent": "Yakk-App" } }, (res) => {
+        log("Response status: " + res.statusCode);
         if (res.statusCode === 302 || res.statusCode === 301) {
           return attempt(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`HTTP ${res.statusCode} from download URL`));
         }
         const totalBytes = parseInt(res.headers["content-length"] || "0");
         let downloadedBytes = 0;
@@ -57,23 +70,31 @@ function downloadFile(url, destPath, progressWin) {
           }
         });
         res.pipe(file);
-        file.on("finish", () => file.close(resolve));
-        file.on("error", reject);
-      }).on("error", reject);
+        file.on("finish", () => { log("Download complete: " + destPath); file.close(resolve); });
+        file.on("error", (e) => { log("File write error: " + e.message); reject(e); });
+      }).on("error", (e) => { log("HTTPS error: " + e.message); reject(e); });
     };
     attempt(url);
   });
 }
 
 async function checkForUpdates() {
-  if (process.env.NODE_ENV === "development") return true;
+  log("checkForUpdates started");
+  if (process.env.NODE_ENV === "development") { log("Dev mode, skipping update check"); return true; }
   try {
+    log("Fetching latest release...");
     const release = await getLatestRelease();
     const latestVersion = release.tag_name;
     const currentVersion = `v${app.getVersion()}`;
+    log(`Current: ${currentVersion}, Latest: ${latestVersion}`);
+
     if (isNewerVersion(latestVersion, currentVersion)) {
+      log("Update available!");
       const asset = release.assets?.find(a => a.name.endsWith(".exe"));
+      log("Asset found: " + JSON.stringify(asset?.name));
       const downloadUrl = asset?.browser_download_url;
+      log("Download URL: " + downloadUrl);
+
       const { response } = await dialog.showMessageBox({
         type: "info",
         title: "Update Available",
@@ -83,49 +104,37 @@ async function checkForUpdates() {
         defaultId: 0,
         cancelId: 1,
       });
+
+      log("User response: " + response);
       if (response === 0 && downloadUrl) {
-        const progressWin = new BrowserWindow({
-          width: 400, height: 120, resizable: false, frame: true,
-          title: "Downloading update...",
-          webPreferences: { nodeIntegration: false },
+      try {
+        const destPath = path.join(os.homedir(), "Downloads", `Yakk-Setup-${latestVersion}.exe`);
+        log("Saving to: " + destPath);
+        await downloadFile(downloadUrl, destPath, null);
+        log("Download finished, launching installer");
+        log("Opening with shell.openPath: " + destPath);
+        shell.openPath(destPath).then((result) => {
+          log("shell.openPath result: '" + result + "'");
         });
-        progressWin.loadURL("about:blank");
-        progressWin.setProgressBar(0);
-        try {
-          const destPath = path.join(os.tmpdir(), `Yakk-Setup-${latestVersion}.exe`);
-          await downloadFile(downloadUrl, destPath, progressWin);
-          progressWin.close();
-          const { response: installResponse } = await dialog.showMessageBox({
-            type: "info", title: "Download Complete", message: "Update downloaded!",
-            detail: "Click Install to run the installer now. Yakk will close.",
-            buttons: ["Install Now", "Install Later"], defaultId: 0,
-          });
-          if (installResponse === 0) {
-            shell.openPath(destPath);
-            setTimeout(() => app.quit(), 2000);
-          } else {
-            shell.showItemInFolder(destPath);
-            app.quit();
-          }
-          return false;
-        } catch {
-          progressWin.close();
-          const { response: fallbackResponse } = await dialog.showMessageBox({
-            type: "warning", title: "Download Failed",
-            message: "Could not download update automatically.",
-            detail: "Would you like to open the download page in your browser instead?",
-            buttons: ["Open in Browser", "Close"], defaultId: 0,
-          });
-          if (fallbackResponse === 0) shell.openExternal(release.html_url);
-          app.quit();
-          return false;
-        }
+        await new Promise(r => setTimeout(r, 3000));
+        log("Quitting");
+        app.quit();
+        return false;
+      } catch (err) {
+        log("Error: " + err.message);
+        app.quit();
+        return false;
       }
+    }
+
+      log("User chose Close, quitting");
       app.quit();
       return false;
     }
+
+    log("No update needed, launching app");
   } catch (err) {
-    console.log("Update check failed, continuing:", err.message);
+    log("checkForUpdates error: " + err.message);
   }
   return true;
 }
@@ -158,7 +167,6 @@ function createWindow() {
   });
 }
 
-// IPC handlers registered once at startup
 ipcMain.on("minimize", () => win?.minimize());
 ipcMain.on("maximize", () => win?.isMaximized() ? win.unmaximize() : win.maximize());
 ipcMain.on("close", () => win?.close());
@@ -168,7 +176,13 @@ ipcMain.on("notify", (event, { title, body }) => {
   }
 });
 
+process.on("uncaughtException", (err) => {
+  log("UNCAUGHT EXCEPTION: " + err.message + "\n" + err.stack);
+  dialog.showErrorBox("Unexpected Error", err.message);
+});
+
 app.whenReady().then(async () => {
+  log("App ready");
   const canContinue = await checkForUpdates();
   if (canContinue) createWindow();
 });
