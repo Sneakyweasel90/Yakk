@@ -1,8 +1,0 @@
-[phases.build]
-cmds = [
-  "cd client && npm install && npm run build",
-  "cd server && npm install"
-]
-
-[start]
-cmd = "cd server && node src/server.js"
