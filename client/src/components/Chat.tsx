@@ -334,10 +334,10 @@ export default function Chat() {
                     <div style={styles.msgHeader}>
                       <span
                         style={{ ...styles.msgUsername, color: theme.primary, cursor: "pointer" }}
-                        onClick={e => setPopover({ userId: msg.user_id, username: msg.username, el: e.currentTarget as HTMLElement })}
+                        onClick={e => setPopover({ userId: msg.user_id, username: msg.raw_username || msg.username, el: e.currentTarget as HTMLElement })}
                         title="Click to set local nickname"
                       >
-                        {resolve(msg.user_id, msg.username)}
+                        {resolve(msg.user_id, msg.raw_username || msg.username)}
                       </span>
                       <span style={{ ...styles.msgTime, color: theme.textDim }}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -400,7 +400,7 @@ export default function Chat() {
       {popover && (
         <UserPopover
           userId={popover.userId}
-          username={popover.username}
+          username={popover.username}  // this is now always raw_username
           isSelf={popover.userId === user!.id}
           anchorEl={popover.el}
           onClose={() => setPopover(null)}

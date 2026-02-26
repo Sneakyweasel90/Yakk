@@ -127,7 +127,7 @@ export async function initWebSocket(server) {
         ws.channels.add(channelId);
 
         const { rows } = await db.query(
-          `SELECT m.*, u.username FROM messages m
+          `SELECT m.*, u.username AS raw_username FROM messages m
            JOIN users u ON m.user_id = u.id
            WHERE m.channel_id = $1
            ORDER BY m.id DESC LIMIT 50`,
@@ -147,7 +147,7 @@ export async function initWebSocket(server) {
         const { channelId, beforeId } = msg;
         if (!channelId || !beforeId) return;
         const { rows } = await db.query(
-          `SELECT m.*, u.username FROM messages m
+          `SELECT m.*, u.username AS raw_username FROM messages m
            JOIN users u ON m.user_id = u.id
            WHERE m.channel_id = $1 AND m.id < $2
            ORDER BY m.id DESC LIMIT 50`,
@@ -181,7 +181,9 @@ export async function initWebSocket(server) {
            VALUES ($1, $2, $3, $4) RETURNING *`,
           [channelId, user.id, displayName, content.trim()]
         );
-        broadcast(channelId, { type: "message", message: { ...rows[0], reactions: [] } });
+        // Fetch raw username to include alongside display name
+        const { rows: uRaw } = await db.query(`SELECT username FROM users WHERE id = $1`, [user.id]);
+        broadcast(channelId, { type: "message", message: { ...rows[0], raw_username: uRaw[0]?.username || user.username, reactions: [] } });
       }
 
       // REACT — toggle a reaction on a message

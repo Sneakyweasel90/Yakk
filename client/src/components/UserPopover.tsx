@@ -48,7 +48,9 @@ export default function UserPopover({ userId, username, isSelf, onClose, anchorE
     }
   };
 
-  const displayedAs = resolve(userId, username);
+  // username prop is always the raw login name
+  // displayedAs = local nickname > their server display name > raw login name
+  const displayedAs = nicknames[userId] || username;
 
   return (
     <div
@@ -74,9 +76,7 @@ export default function UserPopover({ userId, username, isSelf, onClose, anchorE
           <div style={{ color: theme.primary, fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "0.95rem" }}>
             {displayedAs}
           </div>
-          {displayedAs !== username && (
-            <div style={{ color: theme.textDim, fontSize: "0.65rem", opacity: 0.7 }}>({username})</div>
-          )}
+          <div style={{ color: theme.textDim, fontSize: "0.65rem", opacity: 0.7 }}>@{username}</div>
         </div>
       </div>
 

@@ -17,7 +17,8 @@ export interface Message {
   id: number;
   channel_id: string;
   user_id: number;
-  username: string;
+  username: string;       // display name at time of sending
+  raw_username: string;   // always the login username — use for local nickname lookups
   content: string;
   created_at: string;
   reactions: Reaction[];
@@ -44,7 +45,8 @@ export interface OnlineUser {
 export interface SearchResult {
   id: number;
   channel_id: string;
-  username: string;
+  username: string;       // display name at time of sending
+  raw_username: string;   // always the login username — use for local nickname lookups
   content: string;
   created_at: string;
 }
