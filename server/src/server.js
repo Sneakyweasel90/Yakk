@@ -18,7 +18,23 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors());
+// Lock CORS to your Railway domain + localhost for dev
+const allowedOrigins = [
+  "https://yakk-production.up.railway.app",
+  "http://localhost:5173",
+  "http://localhost:4000",
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Electron app, mobile apps)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+}));
+
 app.use(express.json());
 app.use("/api", apiLimiter);
 
@@ -33,7 +49,6 @@ app.get("/api/health", (_, res) => res.json({ ok: true }));
 const clientDist = path.join(__dirname, "../../client/dist");
 app.use(express.static(clientDist));
 
-// All non-API routes serve the React app
 app.get("/{*path}", (req, res) => {
   res.sendFile(path.join(clientDist, "index.html"));
 });

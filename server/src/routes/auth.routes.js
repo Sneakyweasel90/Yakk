@@ -3,11 +3,30 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import db from "../db/postgres.js";
+import rateLimit from "express-rate-limit";
 
 const router = express.Router();
 
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// Strict rate limiter for registration — 5 accounts per IP per hour
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  message: { error: "Too many accounts created from this IP, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Strict rate limiter for login — 10 attempts per IP per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: "Too many login attempts, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 function generateTokens(user) {
   const accessToken = jwt.sign(
@@ -28,11 +47,26 @@ async function storeRefreshToken(userId, token) {
 }
 
 // REGISTER
-router.post("/register", async (req, res) => {
+router.post("/register", registerLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password)
     return res.status(400).json({ error: "Username and password required" });
+
+  // Username rules: 3-20 chars, alphanumeric + underscores only
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username))
+    return res.status(400).json({ error: "Username must be 3-20 characters, letters, numbers and underscores only" });
+
+  if (password.length < 6)
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+  // Global cap — prevent DB spam even across IPs
+  const { rows: countRows } = await db.query(
+    `SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '1 hour'`
+  );
+  if (parseInt(countRows[0].count) > 20) {
+    return res.status(429).json({ error: "Registration temporarily disabled, try again later" });
+  }
 
   try {
     const hashed = await bcrypt.hash(password, 10);
@@ -50,7 +84,7 @@ router.post("/register", async (req, res) => {
 });
 
 // LOGIN
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   const { rows } = await db.query(
