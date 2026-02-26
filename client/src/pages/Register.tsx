@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useTheme } from "../context/ThemeContext";
+import TitleBar from "../components/TitleBar";
 import config from "../config";
 
 export default function Register() {
@@ -32,6 +33,7 @@ export default function Register() {
 
   return (
     <div style={{ ...styles.container, background: theme.background }}>
+      <TitleBar />
       <div style={{
         ...styles.grid,
         backgroundImage: `linear-gradient(${theme.gridColor} 1px, transparent 1px), linear-gradient(90deg, ${theme.gridColor} 1px, transparent 1px)`,
@@ -98,6 +100,7 @@ export default function Register() {
 const styles: Record<string, React.CSSProperties> = {
   container: {
     height: "100vh", width: "100vw", display: "flex",
+    flexDirection: "column",
     alignItems: "center", justifyContent: "center",
     position: "relative", overflow: "hidden",
   },

@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import TitleBar from "../components/TitleBar";
 import config from "../config";
 
 export default function Login() {
@@ -23,7 +24,7 @@ export default function Login() {
         username,
         password,
       });
-      await login(data); // data now includes refreshToken
+      await login(data);
       navigate("/");
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -38,6 +39,7 @@ export default function Login() {
 
   return (
     <div style={{ ...styles.container, background: theme.background }}>
+      <TitleBar />
       <div style={{
         ...styles.grid,
         backgroundImage: `linear-gradient(${theme.gridColor} 1px, transparent 1px), linear-gradient(90deg, ${theme.gridColor} 1px, transparent 1px)`,
@@ -104,6 +106,7 @@ export default function Login() {
 const styles: Record<string, React.CSSProperties> = {
   container: {
     height: "100vh", width: "100vw", display: "flex",
+    flexDirection: "column",
     alignItems: "center", justifyContent: "center",
     position: "relative", overflow: "hidden",
   },
