@@ -10,6 +10,8 @@ import TitleBar from "./TitleBar";
 import VoiceIndicator from "./VoiceIndicator";
 import Avatar from "./Avatar";
 import SearchOverlay from "./SearchOverlay";
+import UserPopover from "./UserPopover";
+import { useLocalNicknames } from "../context/LocalNicknameContext";
 import type { GroupedMessage, Message, OnlineUser, Reaction, ServerMessage } from "../types";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
@@ -102,6 +104,7 @@ function ReactionPills({ reactions, messageId, currentUsername, onReact, theme }
 
 export default function Chat() {
   const { user, logout, updateNickname, updateAvatar } = useAuth();
+  const { resolve, load } = useLocalNicknames();
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
 
@@ -116,6 +119,7 @@ export default function Chat() {
   const [showSearch, setShowSearch] = useState(false);
   const [pickerMsgId, setPickerMsgId] = useState<number | null>(null);
   const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
+  const [popover, setPopover] = useState<{ userId: number; username: string; el: HTMLElement } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -125,6 +129,11 @@ export default function Chat() {
   const jumpToBottomRef = useRef(true);
 
   useEffect(() => { currentChannelRef.current = channel; }, [channel]);
+
+  // Load local nicknames once on mount
+  useEffect(() => {
+    if (user?.token) load(user.token);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -323,7 +332,13 @@ export default function Chat() {
                 <div style={{ ...styles.msgBody, position: "relative" }}>
                   {!msg.isGrouped && (
                     <div style={styles.msgHeader}>
-                      <span style={{ ...styles.msgUsername, color: theme.primary }}>{msg.username}</span>
+                      <span
+                        style={{ ...styles.msgUsername, color: theme.primary, cursor: "pointer" }}
+                        onClick={e => setPopover({ userId: msg.user_id, username: msg.username, el: e.currentTarget as HTMLElement })}
+                        title="Click to set local nickname"
+                      >
+                        {resolve(msg.user_id, msg.username)}
+                      </span>
                       <span style={{ ...styles.msgTime, color: theme.textDim }}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -381,6 +396,16 @@ export default function Chat() {
           <MessageInput send={send} channel={channel} />
         </div>
       </div>
+
+      {popover && (
+        <UserPopover
+          userId={popover.userId}
+          username={popover.username}
+          isSelf={popover.userId === user!.id}
+          anchorEl={popover.el}
+          onClose={() => setPopover(null)}
+        />
+      )}
 
       {showSearch && (
         <SearchOverlay

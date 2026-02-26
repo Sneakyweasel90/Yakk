@@ -54,6 +54,14 @@ export async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id, id DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_content_search ON messages USING gin(to_tsvector('english', content));
     CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
+
+    CREATE TABLE IF NOT EXISTS local_nicknames (
+      owner_id INT REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+      target_id INT REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+      nickname VARCHAR(50) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (owner_id, target_id)
+    );
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
   `);
