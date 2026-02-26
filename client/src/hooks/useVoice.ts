@@ -1,145 +1,150 @@
 import { useRef, useState, useCallback } from "react";
+import type { ClientMessage, ServerMessage } from "../types";
 
-const ICE_SERVERS = {
+const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" }, // Google's free STUN server
+    { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
   ],
 };
 
-export function useVoice(send, currentUserId) {
+export function useVoice(
+  send: (data: ClientMessage) => void,
+  _currentUserId: number
+) {
   const [inVoice, setInVoice] = useState(false);
-  const [voiceChannel, setVoiceChannel] = useState(null);
-  const [participants, setParticipants] = useState([]);
+  const [voiceChannel, setVoiceChannel] = useState<string | null>(null);
+  const [participants, setParticipants] = useState<string[]>([]);
 
-  const localStream = useRef(null);
-  const peers = useRef({}); // userId -> RTCPeerConnection
+  const localStream = useRef<MediaStream | null>(null);
+  const peers = useRef<Record<number, RTCPeerConnection>>({});
 
-  // Create a peer connection to another user
-  const createPeer = useCallback((targetUserId, isInitiator) => {
-    const peer = new RTCPeerConnection(ICE_SERVERS);
+  const createPeer = useCallback(
+    (targetUserId: number, isInitiator: boolean): RTCPeerConnection => {
+      const peer = new RTCPeerConnection(ICE_SERVERS);
 
-    // Add our local audio tracks to the connection
-    if (localStream.current) {
-      localStream.current.getTracks().forEach((track) => {
-        peer.addTrack(track, localStream.current);
-      });
-    }
-
-    // When we get ICE candidates, send them to the other user
-    peer.onicecandidate = (e) => {
-      if (e.candidate) {
-        send({
-          type: "voice_ice",
-          targetUserId,
-          candidate: e.candidate,
+      if (localStream.current) {
+        localStream.current.getTracks().forEach((track) => {
+          peer.addTrack(track, localStream.current!);
         });
       }
-    };
 
-    // When we receive their audio, play it
-    peer.ontrack = (e) => {
-      const audio = new Audio();
-      audio.srcObject = e.streams[0];
-      audio.autoplay = true;
-    };
+      peer.onicecandidate = (e) => {
+        if (e.candidate) {
+          send({ type: "voice_ice", targetUserId, candidate: e.candidate.toJSON() });
+        }
+      };
 
-    // If we're the initiator, create and send an offer
-    if (isInitiator) {
-      peer.createOffer()
-        .then((offer) => peer.setLocalDescription(offer))
-        .then(() => {
-          send({
-            type: "voice_offer",
-            targetUserId,
-            offer: peer.localDescription,
+      peer.ontrack = (e) => {
+        const audio = new Audio();
+        audio.srcObject = e.streams[0];
+        audio.autoplay = true;
+      };
+
+      if (isInitiator) {
+        peer
+          .createOffer()
+          .then((offer) => peer.setLocalDescription(offer))
+          .then(() => {
+            send({
+              type: "voice_offer",
+              targetUserId,
+              offer: peer.localDescription!,
+            });
           });
-        });
-    }
+      }
 
-    peers.current[targetUserId] = peer;
-    return peer;
-  }, [send]);
+      peers.current[targetUserId] = peer;
+      return peer;
+    },
+    [send]
+  );
 
-  // Join a voice channel
-  const joinVoice = useCallback(async (channelId) => {
-    try {
-      // Request microphone access
-      localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      setInVoice(true);
-      setVoiceChannel(channelId);
-
-      // Tell server we joined
-      send({ type: "voice_join", channelId });
-    } catch (err) {
-      console.error("Microphone access denied:", err);
-      alert("Please allow microphone access to use voice chat.");
-    }
-  }, [send]);
-
-  // Leave voice channel
-  const leaveVoice = useCallback(() => {
-    // Stop all audio tracks
+  // Shared cleanup — tears down streams, peers, and state.
+  // Does NOT send voice_leave to server (caller decides whether to notify server).
+  const cleanup = useCallback(() => {
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
-
-    // Close all peer connections
     Object.values(peers.current).forEach((p) => p.close());
     peers.current = {};
-
     setInVoice(false);
     setVoiceChannel(null);
     setParticipants([]);
+  }, []);
 
+  const joinVoice = useCallback(
+    async (channelId: string) => {
+      // If already in a channel, leave it cleanly before joining the new one
+      if (localStream.current || inVoice) {
+        send({ type: "voice_leave" });
+        cleanup();
+      }
+
+      try {
+        localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setInVoice(true);
+        setVoiceChannel(channelId);
+        send({ type: "voice_join", channelId });
+      } catch (err) {
+        console.error("Microphone access denied:", err);
+        alert("Please allow microphone access to use voice chat.");
+        cleanup();
+      }
+    },
+    [send, inVoice, cleanup]
+  );
+
+  const leaveVoice = useCallback(() => {
     send({ type: "voice_leave" });
-  }, [send]);
+    cleanup();
+  }, [send, cleanup]);
 
-  // Handle incoming WebRTC signaling messages
-  const handleVoiceMessage = useCallback(async (data) => {
-    // Someone joined — initiate connection with them
-    if (data.type === "voice_user_joined") {
-      setParticipants((prev) => [...prev, data.username]);
-      createPeer(data.userId, true); // we initiate
-    }
-
-    // Someone left
-    if (data.type === "voice_user_left") {
-      setParticipants((prev) => prev.filter((u) => u !== data.username));
-      peers.current[data.userId]?.close();
-      delete peers.current[data.userId];
-    }
-
-    // We received an offer from another user
-    if (data.type === "voice_offer") {
-      const peer = createPeer(data.userId, false);
-      await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answer = await peer.createAnswer();
-      await peer.setLocalDescription(answer);
-      send({ type: "voice_answer", targetUserId: data.userId, answer });
-    }
-
-    // We received an answer to our offer
-    if (data.type === "voice_answer") {
-      const peer = peers.current[data.userId];
-      if (peer) {
-        await peer.setRemoteDescription(new RTCSessionDescription(data.answer));
+  const handleVoiceMessage = useCallback(
+    (data: ServerMessage) => {
+      if (data.type === "voice_participants") {
+        setParticipants(data.usernames);
       }
-    }
 
-    // We received an ICE candidate
-    if (data.type === "voice_ice") {
-      const peer = peers.current[data.userId];
-      if (peer) {
-        await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+      if (data.type === "voice_user_joined") {
+        setParticipants((prev) =>
+          prev.includes(data.username) ? prev : [...prev, data.username]
+        );
+        createPeer(data.userId, true);
       }
-    }
 
-    // Existing participants in channel when we join
-    if (data.type === "voice_participants") {
-      setParticipants(data.usernames);
-    }
-  }, [createPeer, send]);
+      if (data.type === "voice_user_left") {
+        setParticipants((prev) => prev.filter((u) => u !== data.username));
+        peers.current[data.userId]?.close();
+        delete peers.current[data.userId];
+      }
+
+      if (data.type === "voice_offer") {
+        const peer = createPeer(data.userId, false);
+        peer
+          .setRemoteDescription(data.offer)
+          .then(() => peer.createAnswer())
+          .then((answer) => peer.setLocalDescription(answer))
+          .then(() => {
+            send({
+              type: "voice_answer",
+              targetUserId: data.userId,
+              answer: peer.localDescription!,
+            });
+          });
+      }
+
+      if (data.type === "voice_answer") {
+        peers.current[data.userId]?.setRemoteDescription(data.answer);
+      }
+
+      if (data.type === "voice_ice") {
+        peers.current[data.userId]?.addIceCandidate(
+          new RTCIceCandidate(data.candidate)
+        );
+      }
+    },
+    [createPeer, send]
+  );
 
   return {
     inVoice,

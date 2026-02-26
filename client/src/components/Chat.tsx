@@ -300,7 +300,7 @@ export default function Chat() {
                 key={msg.id}
                 style={{ ...styles.msgRow, paddingTop: msg.isGrouped ? "0.1rem" : "0.65rem" }}
                 onMouseEnter={() => setHoveredMsgId(msg.id)}
-                onMouseLeave={() => { setHoveredMsgId(null); setPickerMsgId(null); }}
+                onMouseLeave={() => { if (pickerMsgId !== msg.id) setHoveredMsgId(null); }}
               >
                 <div style={styles.avatarCol}>
                   {!msg.isGrouped && <Avatar username={msg.username} size={34} />}
@@ -342,7 +342,7 @@ export default function Chat() {
                     <EmojiPicker
                       messageId={msg.id}
                       onReact={handleReact}
-                      onClose={() => setPickerMsgId(null)}
+                      onClose={() => { setPickerMsgId(null); setHoveredMsgId(null); }}
                       theme={theme as unknown as Record<string, string>}
                     />
                   )}
