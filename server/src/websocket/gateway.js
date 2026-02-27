@@ -232,7 +232,14 @@ export async function initWebSocket(server) {
         ws.voiceChannel = channelId;
         if (!channels.has(`voice:${channelId}`)) channels.set(`voice:${channelId}`, new Set());
         const voiceClients = channels.get(`voice:${channelId}`);
-        ws.send(JSON.stringify({ type: "voice_participants", usernames: [...voiceClients].map(c => c.user.username) }));
+        
+        // Send both usernames AND userIds to the joining user
+        ws.send(JSON.stringify({ 
+          type: "voice_participants", 
+          usernames: [...voiceClients].map(c => c.user.username),
+          userIds: [...voiceClients].map(c => c.user.id)
+        }));
+        
         for (const client of voiceClients) {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({ type: "voice_user_joined", userId: user.id, username: user.username }));

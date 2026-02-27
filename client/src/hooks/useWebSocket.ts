@@ -9,6 +9,11 @@ export function useWebSocket(
   const ws = useRef<WebSocket | null>(null);
   const currentChannelRef = useRef<string | null>(null);
   const intentionalClose = useRef(false);
+  const onMessageRef = useRef(onMessage);
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   const connect = useCallback(() => {
     ws.current = new WebSocket(`${config.WS}?token=${token}`);
@@ -24,7 +29,7 @@ export function useWebSocket(
 
     ws.current.onmessage = (e: MessageEvent) => {
       const data = JSON.parse(e.data) as ServerMessage;
-      onMessage(data);
+      onMessageRef.current(data); 
     };
 
     ws.current.onclose = () => {
@@ -32,7 +37,7 @@ export function useWebSocket(
         setTimeout(connect, 2000);
       }
     };
-  }, [token, onMessage]);
+  }, [token]); 
 
   useEffect(() => {
     intentionalClose.current = false;

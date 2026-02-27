@@ -59,7 +59,7 @@ export type ServerMessage =
   | { type: "error"; message: string }
   | { type: "presence"; users: OnlineUser[] }
   | { type: "reaction_update"; messageId: number; reactions: Reaction[] }
-  | { type: "voice_participants"; usernames: string[] }
+  | { type: "voice_participants"; usernames: string[]; userIds: number[] }
   | { type: "voice_user_joined"; userId: number; username: string }
   | { type: "voice_user_left"; userId: number; username: string }
   | { type: "voice_offer"; userId: number; offer: RTCSessionDescriptionInit; targetUserId: number }
