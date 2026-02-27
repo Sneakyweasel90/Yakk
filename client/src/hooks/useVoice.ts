@@ -130,7 +130,7 @@ export function useVoice(
         setParticipants((prev) =>
           prev.includes(data.username) ? prev : [...prev, data.username]
         );
-        createPeer(data.userId, true);
+        createPeer(data.userId, false);
       }
 
       if (data.type === "voice_user_left") {
