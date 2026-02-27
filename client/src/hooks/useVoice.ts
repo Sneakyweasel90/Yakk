@@ -141,12 +141,7 @@ export function useVoice(
 
       if (data.type === "voice_offer") {
         if (!localStream.current) {
-          try {
-            localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-          } catch (err) {
-            console.error("Microphone access denied:", err);
-            return;
-          }
+          localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
         }
         const peer = createPeer(data.userId, false);
         peer
