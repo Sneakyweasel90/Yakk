@@ -247,6 +247,10 @@ export async function initWebSocket(server) {
         voiceClients.add(ws);
       }
 
+      if (msg.type === "ping") {
+        ws.send(JSON.stringify({ type: "pong" }));
+      }
+
       // VOICE leave
       if (msg.type === "voice_leave") {
         if (ws.voiceChannel) {

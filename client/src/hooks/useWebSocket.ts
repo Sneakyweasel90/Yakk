@@ -16,7 +16,14 @@ export function useWebSocket(
   }, [onMessage]);
 
   const connect = useCallback(() => {
+    // Guard against duplicate connections
+    if (ws.current?.readyState === WebSocket.OPEN ||
+        ws.current?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+
     ws.current = new WebSocket(`${config.WS}?token=${token}`);
+    let heartbeatInterval: ReturnType<typeof setInterval>;
 
     ws.current.onopen = () => {
       console.log("Yakk connected");
@@ -25,19 +32,26 @@ export function useWebSocket(
           JSON.stringify({ type: "join", channelId: currentChannelRef.current })
         );
       }
+      // Start heartbeat every 30 seconds
+      heartbeatInterval = setInterval(() => {
+        if (ws.current?.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 30000);
     };
 
     ws.current.onmessage = (e: MessageEvent) => {
       const data = JSON.parse(e.data) as ServerMessage;
-      onMessageRef.current(data); 
+      onMessageRef.current(data);
     };
 
     ws.current.onclose = () => {
+      clearInterval(heartbeatInterval);
       if (!intentionalClose.current) {
         setTimeout(connect, 2000);
       }
     };
-  }, [token]); 
+  }, [token]);
 
   useEffect(() => {
     intentionalClose.current = false;
@@ -52,13 +66,11 @@ export function useWebSocket(
     if (data.type === "join") {
       currentChannelRef.current = data.channelId;
     }
-
     const doSend = () => {
       if (ws.current?.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify(data));
       }
     };
-
     if (ws.current?.readyState === WebSocket.OPEN) {
       doSend();
     } else {
@@ -66,8 +78,6 @@ export function useWebSocket(
     }
   }, []);
 
-  // Call this on logout to cleanly close the socket before clearing auth state,
-  // so the server fires onclose immediately and removes the user from Redis
   const disconnect = useCallback(() => {
     intentionalClose.current = true;
     ws.current?.close();

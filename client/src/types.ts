@@ -64,7 +64,8 @@ export type ServerMessage =
   | { type: "voice_user_left"; userId: number; username: string }
   | { type: "voice_offer"; userId: number; offer: RTCSessionDescriptionInit; targetUserId: number }
   | { type: "voice_answer"; userId: number; answer: RTCSessionDescriptionInit; targetUserId: number }
-  | { type: "voice_ice"; userId: number; candidate: RTCIceCandidateInit; targetUserId: number };
+  | { type: "voice_ice"; userId: number; candidate: RTCIceCandidateInit; targetUserId: number }
+  | { type: "pong" };
 
 export type ClientMessage =
   | { type: "join"; channelId: string }
