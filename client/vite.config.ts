@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+  },
   server: {
     proxy: {
       '/api': {
@@ -13,7 +16,7 @@ export default defineConfig({
       '/ws': {
         target: 'ws://localhost:4000',
         ws: true,
-      }
+      },
     }
   }
 })

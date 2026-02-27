@@ -1,4 +1,5 @@
 import { useTheme } from "../context/ThemeContext";
+import { APP_VERSION } from "../version";
 
 export default function TitleBar() {
   const { theme } = useTheme();
@@ -10,7 +11,7 @@ export default function TitleBar() {
       borderBottom: `1px solid ${theme.border}`,
     }}>
       <span style={{ ...styles.title, color: theme.primary }}>
-        YAKK <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v1.0</span>
+        YAKK <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v{APP_VERSION}</span>
       </span>
       <div style={styles.controls}>
         <button

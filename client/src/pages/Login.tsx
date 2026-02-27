@@ -4,6 +4,7 @@ import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import config from "../config";
+import { APP_VERSION } from "../version";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -38,7 +39,7 @@ export default function Login() {
       {/* Drag region across the top */}
       <div style={{ ...styles.dragbar, background: theme.surface2, borderBottom: `1px solid ${theme.border}` }}>
         <span style={{ ...styles.dragTitle, color: theme.primary }}>
-          YAKK <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v1.0</span>
+          YAKK <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v{APP_VERSION}</span>
         </span>
         <div style={styles.winControls}>
           <button style={{ ...styles.winBtn, color: theme.textDim }} onClick={() => window.electronAPI?.minimize()}>─</button>
