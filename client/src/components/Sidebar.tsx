@@ -300,7 +300,7 @@ export default function Sidebar({
 
 const styles: Record<string, React.CSSProperties> = {
   sidebar: {
-    width: "230px", minWidth: "230px", display: "flex",
+    width: "100%", minWidth: "100%", height: "100%", display: "flex",
     flexDirection: "column", borderRight: "1px solid",
     fontFamily: "'Rajdhani', sans-serif", overflowY: "auto",
   },
