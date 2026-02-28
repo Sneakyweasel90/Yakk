@@ -23,11 +23,12 @@ interface Props {
   onSearchOpen: () => void;
   onNicknameChange: (nickname: string | null) => void;
   onAvatarChange: (avatar: string | null) => void;
+  participants: string[];
 }
 
 export default function Sidebar({
   channel, setChannel, voiceChannel, joinVoice, leaveVoice,
-  logout, username, nickname, avatar, userId, token, onlineUsers, onSearchOpen, onNicknameChange, onAvatarChange,
+  logout, username, nickname, avatar, userId, token, onlineUsers, onSearchOpen, onNicknameChange, onAvatarChange, participants
 }: Props) {
   const { theme } = useTheme();
   const [showThemes, setShowThemes] = useState(false);
@@ -198,32 +199,46 @@ export default function Sidebar({
       </div>
       {showCreateVoice && <CreateChannelInput type="voice" />}
       {voiceChannels.map(ch => (
-        <div key={ch.id} style={styles.voiceRow}>
-          <div
-            onClick={() => voiceChannel === ch.name ? leaveVoice() : joinVoice(ch.name)}
-            style={{
-              ...styles.channel,
-              flex: 1,
-              color: ch.name === voiceChannel ? theme.primary : theme.textDim,
-              background: ch.name === voiceChannel ? theme.primaryGlow : "transparent",
-              borderLeft: ch.name === voiceChannel ? `2px solid ${theme.primary}` : "2px solid transparent",
-            }}
-          >
-            <span style={{ color: theme.textDim }}>◈</span>
-            <span style={{ flex: 1 }}>{ch.name.replace("voice-", "")}</span>
+        <div key={ch.id} style={{ ...styles.voiceRow, flexDirection: "column", alignItems: "stretch" }}>
+          <div style={{ display: "flex", alignItems: "center", paddingRight: "0.5rem" }}>
+            <div
+              onClick={() => voiceChannel === ch.name ? leaveVoice() : joinVoice(ch.name)}
+              style={{
+                ...styles.channel,
+                flex: 1,
+                color: ch.name === voiceChannel ? theme.primary : theme.textDim,
+                background: ch.name === voiceChannel ? theme.primaryGlow : "transparent",
+                borderLeft: ch.name === voiceChannel ? `2px solid ${theme.primary}` : "2px solid transparent",
+              }}
+            >
+              <span style={{ color: theme.textDim }}>◈</span>
+              <span style={{ flex: 1 }}>{ch.name.replace("voice-", "")}</span>
+            </div>
+            {ch.name === voiceChannel && (
+              <span style={{ ...styles.liveTag, color: theme.primary, borderColor: theme.primaryDim, background: theme.primaryGlow }}>
+                LIVE
+              </span>
+            )}
+            {ch.created_by !== null && (
+              <span
+                onClick={e => deleteChannel(ch.id, e)}
+                style={{ ...styles.deleteBtn, color: theme.textDim }}
+                title="Delete channel"
+              >×</span>
+            )}
           </div>
-          {ch.name === voiceChannel && (
-            <span style={{ ...styles.liveTag, color: theme.primary, borderColor: theme.primaryDim, background: theme.primaryGlow }}>
-              LIVE
-            </span>
-          )}
-          {ch.created_by !== null && (
-            <span
-              onClick={e => deleteChannel(ch.id, e)}
-              style={{ ...styles.deleteBtn, color: theme.textDim }}
-              title="Delete channel"
-            >×</span>
-          )}
+          {ch.name === voiceChannel && [username, ...participants].map(name => (
+            <div key={name} style={{
+              display: "flex", alignItems: "center", gap: "0.5rem",
+              padding: "0.2rem 1rem 0.2rem 2.5rem",
+            }}>
+              <Avatar username={name} size={18} />
+              <span style={{ fontSize: "0.75rem", color: theme.textDim, fontFamily: "'Share Tech Mono', monospace" }}>
+                {name}
+              </span>
+              <span style={{ fontSize: "0.55rem", color: "#4ade80" }}>🎙</span>
+            </div>
+          ))}
         </div>
       ))}
 

@@ -371,6 +371,7 @@ export default function Chat() {
             channel={channel}
             setChannel={setChannel}
             voiceChannel={voiceChannel}
+            participants={participants}
             joinVoice={joinVoice}
             leaveVoice={leaveVoice}
             logout={handleLogout}
