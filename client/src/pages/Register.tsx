@@ -12,13 +12,14 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const [inviteCode, setInviteCode] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await axios.post(`${config.HTTP}/api/auth/register`, { username, password });
+      await axios.post(`${config.HTTP}/api/auth/register`, { username, password, inviteCode });
       navigate("/login");
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -65,6 +66,13 @@ export default function Register() {
           <div style={{ ...styles.logoSub, color: theme.textDim }}>CREATE NEW IDENTITY</div>
         </div>
         <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.fieldWrap}>
+            <label style={{ ...styles.label, color: theme.textDim }}>INVITE CODE</label>
+            <input
+              style={{ ...styles.input, background: theme.primaryGlow, border: `1px solid ${theme.border}`, color: theme.primary }}
+              placeholder="enter invite code" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)}
+            />
+          </div>
           <div style={styles.fieldWrap}>
             <label style={{ ...styles.label, color: theme.textDim }}>CHOOSE IDENTIFIER</label>
             <input

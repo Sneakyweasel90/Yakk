@@ -48,7 +48,10 @@ async function storeRefreshToken(userId, token) {
 
 // REGISTER
 router.post("/register", registerLimiter, async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, inviteCode } = req.body; 
+
+  if (!process.env.INVITE_CODE || inviteCode !== process.env.INVITE_CODE)
+    return res.status(403).json({ error: "Invalid invite code" });
 
   if (!username || !password)
     return res.status(400).json({ error: "Username and password required" });
