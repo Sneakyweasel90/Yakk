@@ -20,7 +20,7 @@ export default function Avatar({ username, size = 32, avatar, style }: Props) {
   const border = `hsl(${hue}, 70%, 50%)`;
 
   if (avatar) {
-    return (
+    return ( 
       <img
         src={avatar}
         alt={username}
