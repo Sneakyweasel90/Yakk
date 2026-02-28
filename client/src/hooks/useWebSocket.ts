@@ -13,17 +13,21 @@ export function useWebSocket(
   const onMessageRef = useRef(onMessage);
   const onReconnectRef = useRef(onReconnect);
   const isFirstConnect = useRef(true);
+  // Store token in a ref so connect() never needs to be recreated when it changes
+  const tokenRef = useRef(token);
 
   useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
   useEffect(() => { onReconnectRef.current = onReconnect; }, [onReconnect]);
+  useEffect(() => { tokenRef.current = token; }, [token]);
 
+  // connect is stable forever — no dependencies means no new references, no re-runs
   const connect = useCallback(() => {
     if (
       ws.current?.readyState === WebSocket.OPEN ||
       ws.current?.readyState === WebSocket.CONNECTING
     ) return;
 
-    ws.current = new WebSocket(`${config.WS}?token=${token}`);
+    ws.current = new WebSocket(`${config.WS}?token=${tokenRef.current}`);
     let heartbeatInterval: ReturnType<typeof setInterval>;
 
     ws.current.onopen = () => {
@@ -33,7 +37,6 @@ export function useWebSocket(
         ws.current!.send(JSON.stringify({ type: "join", channelId: currentChannelRef.current }));
       }
 
-      // Fire onReconnect for any reconnection after the first connect
       if (!isFirstConnect.current) {
         onReconnectRef.current?.();
       }
@@ -57,8 +60,9 @@ export function useWebSocket(
         setTimeout(connect, 2000);
       }
     };
-  }, [token]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Runs once on mount, cleans up on unmount — connect is stable so this never re-runs
   useEffect(() => {
     intentionalClose.current = false;
     isFirstConnect.current = true;
@@ -66,8 +70,9 @@ export function useWebSocket(
     return () => {
       intentionalClose.current = true;
       ws.current?.close();
+      ws.current = null;
     };
-  }, [connect]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = useCallback((data: ClientMessage) => {
     if (data.type === "join") {

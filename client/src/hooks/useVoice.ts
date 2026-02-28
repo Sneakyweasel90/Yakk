@@ -82,6 +82,13 @@ export function useVoice(
       peer.onconnectionstatechange = () => {
         const state = peer.connectionState;
         console.log(`Peer ${targetUserId} connection state: ${state}`);
+        peer.onconnectionstatechange = () => {
+          console.log(`[${new Date().toISOString()}] Peer ${targetUserId} state: ${peer.connectionState}`);
+        };
+
+        peer.oniceconnectionstatechange = () => {
+          console.log(`[${new Date().toISOString()}] Peer ${targetUserId} ICE: ${peer.iceConnectionState}`);
+        };
 
         if (state === "failed") {
           console.warn(`Peer ${targetUserId} failed — attempting ICE restart`);
