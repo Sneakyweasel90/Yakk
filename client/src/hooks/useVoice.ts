@@ -39,9 +39,17 @@ export function useVoice(
 
   const localStream = useRef<MediaStream | null>(null);
   const peers = useRef<Record<number, RTCPeerConnection>>({});
+  // Keep audio elements alive — storing them prevents garbage collection killing audio mid-call
+  const audioElements = useRef<Record<number, HTMLAudioElement>>({});
 
   const createPeer = useCallback(
     (targetUserId: number, isInitiator: boolean): RTCPeerConnection => {
+      // Clean up any existing peer for this user before creating a new one
+      if (peers.current[targetUserId]) {
+        peers.current[targetUserId].close();
+        delete peers.current[targetUserId];
+      }
+
       const peer = new RTCPeerConnection(ICE_SERVERS);
 
       if (localStream.current) {
@@ -56,10 +64,45 @@ export function useVoice(
         }
       };
 
+      // FIX: Store the audio element in a ref so it doesn't get garbage collected
       peer.ontrack = (e) => {
-        const audio = new Audio();
+        let audio = audioElements.current[targetUserId];
+        if (!audio) {
+          audio = new Audio();
+          audio.autoplay = true;
+          audioElements.current[targetUserId] = audio;
+        }
         audio.srcObject = e.streams[0];
-        audio.autoplay = true;
+        audio.play().catch(() => {
+          // Autoplay blocked — will play on next user interaction
+        });
+      };
+
+      // FIX: Detect and recover from failed/disconnected peer connections
+      peer.onconnectionstatechange = () => {
+        const state = peer.connectionState;
+        console.log(`Peer ${targetUserId} connection state: ${state}`);
+
+        if (state === "failed") {
+          console.warn(`Peer ${targetUserId} failed — attempting ICE restart`);
+          // ICE restart: renegotiate with new candidates
+          if (isInitiator) {
+            peer.createOffer({ iceRestart: true })
+              .then((offer) => peer.setLocalDescription(offer))
+              .then(() => {
+                send({ type: "voice_offer", targetUserId, offer: peer.localDescription! });
+              })
+              .catch(console.error);
+          }
+        }
+
+        if (state === "closed") {
+          delete audioElements.current[targetUserId];
+        }
+      };
+
+      peer.oniceconnectionstatechange = () => {
+        console.log(`Peer ${targetUserId} ICE state: ${peer.iceConnectionState}`);
       };
 
       if (isInitiator) {
@@ -72,7 +115,8 @@ export function useVoice(
               targetUserId,
               offer: peer.localDescription!,
             });
-          });
+          })
+          .catch(console.error);
       }
 
       peers.current[targetUserId] = peer;
@@ -86,6 +130,11 @@ export function useVoice(
     localStream.current = null;
     Object.values(peers.current).forEach((p) => p.close());
     peers.current = {};
+    // Clean up audio elements
+    Object.values(audioElements.current).forEach((a) => {
+      a.srcObject = null;
+    });
+    audioElements.current = {};
     setInVoice(false);
     setVoiceChannel(null);
     setParticipants([]);
@@ -117,6 +166,18 @@ export function useVoice(
     cleanup();
   }, [send, cleanup]);
 
+  // Called by useWebSocket when the socket reconnects — rejoins the voice channel
+  // so the server knows we're still in the call
+  const rejoinVoice = useCallback(() => {
+    const channel = voiceChannel;
+    if (!channel || !localStream.current) return;
+    console.log("WS reconnected — rejoining voice channel:", channel);
+    // Close stale peers; the server will re-send voice_participants
+    Object.values(peers.current).forEach((p) => p.close());
+    peers.current = {};
+    send({ type: "voice_join", channelId: channel });
+  }, [voiceChannel, send]);
+
   const handleVoiceMessage = useCallback(
     async (data: ServerMessage) => {
       if (data.type === "voice_participants") {
@@ -137,6 +198,11 @@ export function useVoice(
         setParticipants((prev) => prev.filter((u) => u !== data.username));
         peers.current[data.userId]?.close();
         delete peers.current[data.userId];
+        // Clean up their audio element
+        if (audioElements.current[data.userId]) {
+          audioElements.current[data.userId].srcObject = null;
+          delete audioElements.current[data.userId];
+        }
       }
 
       if (data.type === "voice_offer") {
@@ -154,17 +220,19 @@ export function useVoice(
               targetUserId: data.userId,
               answer: peer.localDescription!,
             });
-          });
+          })
+          .catch(console.error);
       }
 
       if (data.type === "voice_answer") {
-        peers.current[data.userId]?.setRemoteDescription(data.answer);
+        peers.current[data.userId]?.setRemoteDescription(data.answer).catch(console.error);
       }
 
       if (data.type === "voice_ice") {
-        peers.current[data.userId]?.addIceCandidate(
-          new RTCIceCandidate(data.candidate)
-        );
+        const peer = peers.current[data.userId];
+        if (peer && peer.remoteDescription) {
+          peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
+        }
       }
     },
     [createPeer, send]
@@ -176,6 +244,7 @@ export function useVoice(
     participants,
     joinVoice,
     leaveVoice,
+    rejoinVoice,
     handleVoiceMessage,
   };
 }

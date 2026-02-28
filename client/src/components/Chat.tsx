@@ -34,6 +34,10 @@ export default function Chat() {
   const currentChannelRef = useRef(channel);
   useEffect(() => { currentChannelRef.current = channel; }, [channel]);
 
+  // Breaks the circular dependency between useWebSocket (needs rejoinVoice)
+  // and useVoice (needs send). Updated once useVoice is initialised below.
+  const rejoinVoiceRef = useRef<() => void>(() => {});
+
   // Load local nicknames once on mount
   useEffect(() => {
     if (user?.token) load(user.token);
@@ -51,11 +55,15 @@ export default function Chat() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const { send, disconnect } = useWebSocket(user!.token, (data) => {
-    if (data.type?.startsWith("voice_")) handleVoiceMessage(data);
-    else if (data.type === "presence") setOnlineUsers(data.users);
-    else handleMessage(data);
-  });
+  const { send, disconnect } = useWebSocket(
+    user!.token,
+    (data) => {
+      if (data.type?.startsWith("voice_")) handleVoiceMessage(data);
+      else if (data.type === "presence") setOnlineUsers(data.users);
+      else handleMessage(data);
+    },
+    () => rejoinVoiceRef.current(),
+  );
 
   const {
     groupedMessages,
@@ -69,8 +77,13 @@ export default function Chat() {
     messagesContainerRef,
   } = useMessages({ channel, send, currentUserId: user!.id, currentChannelRef, userRef });
 
-  const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, handleVoiceMessage } =
+  const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, rejoinVoice, handleVoiceMessage } =
     useVoice(send, user!.id);
+
+  // Keep the ref in sync so the WS reconnect callback always calls the latest version
+  useEffect(() => {
+    rejoinVoiceRef.current = rejoinVoice;
+  }, [rejoinVoice]);
 
   const handleLogout = useCallback(async () => {
     disconnect();

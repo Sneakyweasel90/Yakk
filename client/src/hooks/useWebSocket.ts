@@ -4,35 +4,41 @@ import type { ClientMessage, ServerMessage } from "../types";
 
 export function useWebSocket(
   token: string,
-  onMessage: (data: ServerMessage) => void
+  onMessage: (data: ServerMessage) => void,
+  onReconnect?: () => void,
 ) {
   const ws = useRef<WebSocket | null>(null);
   const currentChannelRef = useRef<string | null>(null);
   const intentionalClose = useRef(false);
   const onMessageRef = useRef(onMessage);
+  const onReconnectRef = useRef(onReconnect);
+  const isFirstConnect = useRef(true);
 
-  useEffect(() => {
-    onMessageRef.current = onMessage;
-  }, [onMessage]);
+  useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
+  useEffect(() => { onReconnectRef.current = onReconnect; }, [onReconnect]);
 
   const connect = useCallback(() => {
-    // Guard against duplicate connections
-    if (ws.current?.readyState === WebSocket.OPEN ||
-        ws.current?.readyState === WebSocket.CONNECTING) {
-      return;
-    }
+    if (
+      ws.current?.readyState === WebSocket.OPEN ||
+      ws.current?.readyState === WebSocket.CONNECTING
+    ) return;
 
     ws.current = new WebSocket(`${config.WS}?token=${token}`);
     let heartbeatInterval: ReturnType<typeof setInterval>;
 
     ws.current.onopen = () => {
       console.log("Yakk connected");
+
       if (currentChannelRef.current) {
-        ws.current!.send(
-          JSON.stringify({ type: "join", channelId: currentChannelRef.current })
-        );
+        ws.current!.send(JSON.stringify({ type: "join", channelId: currentChannelRef.current }));
       }
-      // Start heartbeat every 30 seconds
+
+      // Fire onReconnect for any reconnection after the first connect
+      if (!isFirstConnect.current) {
+        onReconnectRef.current?.();
+      }
+      isFirstConnect.current = false;
+
       heartbeatInterval = setInterval(() => {
         if (ws.current?.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({ type: "ping" }));
@@ -55,6 +61,7 @@ export function useWebSocket(
 
   useEffect(() => {
     intentionalClose.current = false;
+    isFirstConnect.current = true;
     connect();
     return () => {
       intentionalClose.current = true;
