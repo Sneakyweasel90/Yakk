@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [scheduleRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (user) doRefresh(user);
+    if (user) scheduleRefresh(user);
     return () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
