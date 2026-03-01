@@ -3,9 +3,7 @@ import type { ClientMessage, ServerMessage } from "../types";
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
-    {
-      urls: "stun:stun.relay.metered.ca:80",
-    },
+    { urls: "stun:stun.relay.metered.ca:80" },
     {
       urls: "turn:global.relay.metered.ca:80",
       username: import.meta.env.VITE_METERED_USERNAME,
@@ -29,6 +27,49 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
+// Chromium handles echo cancellation and gain — RNNoise handles noise suppression
+const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  autoGainControl: true,
+  noiseSuppression: false,
+};
+
+// Pipes mic stream through @sapphi-red/web-noise-suppressor (RNNoise via WASM).
+// Falls back to raw stream if it fails to load.
+async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStream> {
+  try {
+    const { NoiseSupressor, NoiseSupressorWorklet } = await import(
+      "@sapphi-red/web-noise-suppressor"
+    );
+
+    const audioCtx = new AudioContext({ sampleRate: 48000 });
+
+    await audioCtx.audioWorklet.addModule(NoiseSupressorWorklet);
+
+    const source = audioCtx.createMediaStreamSource(rawStream);
+    const destination = audioCtx.createMediaStreamDestination();
+
+    const suppressor = new NoiseSupressor(audioCtx);
+    await suppressor.init();
+
+    source.connect(suppressor.getNode());
+    suppressor.getNode().connect(destination);
+
+    console.log("Noise suppression active (RNNoise WASM)");
+    return destination.stream;
+  } catch (err) {
+    console.warn("Noise suppressor failed to load, using raw stream:", err);
+    return rawStream;
+  }
+}
+
+async function getMicStream(): Promise<MediaStream> {
+  const rawStream = await navigator.mediaDevices.getUserMedia({
+    audio: AUDIO_CONSTRAINTS,
+  });
+  return applyNoiseSuppression(rawStream);
+}
+
 export function useVoice(
   send: (data: ClientMessage) => void,
   _currentUserId: number
@@ -39,12 +80,10 @@ export function useVoice(
 
   const localStream = useRef<MediaStream | null>(null);
   const peers = useRef<Record<number, RTCPeerConnection>>({});
-  // Keep audio elements alive — storing them prevents garbage collection killing audio mid-call
   const audioElements = useRef<Record<number, HTMLAudioElement>>({});
 
   const createPeer = useCallback(
     (targetUserId: number, isInitiator: boolean): RTCPeerConnection => {
-      // Clean up any existing peer for this user before creating a new one
       if (peers.current[targetUserId]) {
         peers.current[targetUserId].close();
         delete peers.current[targetUserId];
@@ -64,7 +103,6 @@ export function useVoice(
         }
       };
 
-      // FIX: Store the audio element in a ref so it doesn't get garbage collected
       peer.ontrack = (e) => {
         let audio = audioElements.current[targetUserId];
         if (!audio) {
@@ -73,56 +111,34 @@ export function useVoice(
           audioElements.current[targetUserId] = audio;
         }
         audio.srcObject = e.streams[0];
-        audio.play().catch(() => {
-          // Autoplay blocked — will play on next user interaction
-        });
+        audio.play().catch(() => {});
       };
 
-      // FIX: Detect and recover from failed/disconnected peer connections
       peer.onconnectionstatechange = () => {
         const state = peer.connectionState;
-        console.log(`Peer ${targetUserId} connection state: ${state}`);
-        peer.onconnectionstatechange = () => {
-          console.log(`[${new Date().toISOString()}] Peer ${targetUserId} state: ${peer.connectionState}`);
-        };
-
-        peer.oniceconnectionstatechange = () => {
-          console.log(`[${new Date().toISOString()}] Peer ${targetUserId} ICE: ${peer.iceConnectionState}`);
-        };
-
+        console.log(`[${new Date().toISOString()}] Peer ${targetUserId} state: ${state}`);
         if (state === "failed") {
           console.warn(`Peer ${targetUserId} failed — attempting ICE restart`);
-          // ICE restart: renegotiate with new candidates
           if (isInitiator) {
             peer.createOffer({ iceRestart: true })
               .then((offer) => peer.setLocalDescription(offer))
-              .then(() => {
-                send({ type: "voice_offer", targetUserId, offer: peer.localDescription! });
-              })
+              .then(() => send({ type: "voice_offer", targetUserId, offer: peer.localDescription! }))
               .catch(console.error);
           }
         }
-
         if (state === "closed") {
           delete audioElements.current[targetUserId];
         }
       };
 
       peer.oniceconnectionstatechange = () => {
-        console.log(`Peer ${targetUserId} ICE state: ${peer.iceConnectionState}`);
+        console.log(`[${new Date().toISOString()}] Peer ${targetUserId} ICE: ${peer.iceConnectionState}`);
       };
 
       if (isInitiator) {
-        peer
-          .createOffer()
+        peer.createOffer()
           .then((offer) => peer.setLocalDescription(offer))
-          .then(() => {
-            send({
-              type: "voice_offer",
-              targetUserId,
-              offer: peer.localDescription!,
-            });
-          })
+          .then(() => send({ type: "voice_offer", targetUserId, offer: peer.localDescription! }))
           .catch(console.error);
       }
 
@@ -137,10 +153,7 @@ export function useVoice(
     localStream.current = null;
     Object.values(peers.current).forEach((p) => p.close());
     peers.current = {};
-    // Clean up audio elements
-    Object.values(audioElements.current).forEach((a) => {
-      a.srcObject = null;
-    });
+    Object.values(audioElements.current).forEach((a) => { a.srcObject = null; });
     audioElements.current = {};
     setInVoice(false);
     setVoiceChannel(null);
@@ -153,9 +166,8 @@ export function useVoice(
         send({ type: "voice_leave" });
         cleanup();
       }
-
       try {
-        localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStream.current = await getMicStream();
         setInVoice(true);
         setVoiceChannel(channelId);
         send({ type: "voice_join", channelId });
@@ -173,13 +185,10 @@ export function useVoice(
     cleanup();
   }, [send, cleanup]);
 
-  // Called by useWebSocket when the socket reconnects — rejoins the voice channel
-  // so the server knows we're still in the call
   const rejoinVoice = useCallback(() => {
     const channel = voiceChannel;
     if (!channel || !localStream.current) return;
     console.log("WS reconnected — rejoining voice channel:", channel);
-    // Close stale peers; the server will re-send voice_participants
     Object.values(peers.current).forEach((p) => p.close());
     peers.current = {};
     send({ type: "voice_join", channelId: channel });
@@ -189,9 +198,7 @@ export function useVoice(
     async (data: ServerMessage) => {
       if (data.type === "voice_participants") {
         setParticipants(data.usernames);
-        data.userIds.forEach((userId: number) => {
-          createPeer(userId, true);
-        });
+        data.userIds.forEach((userId: number) => createPeer(userId, true));
       }
 
       if (data.type === "voice_user_joined") {
@@ -205,7 +212,6 @@ export function useVoice(
         setParticipants((prev) => prev.filter((u) => u !== data.username));
         peers.current[data.userId]?.close();
         delete peers.current[data.userId];
-        // Clean up their audio element
         if (audioElements.current[data.userId]) {
           audioElements.current[data.userId].srcObject = null;
           delete audioElements.current[data.userId];
@@ -214,20 +220,13 @@ export function useVoice(
 
       if (data.type === "voice_offer") {
         if (!localStream.current) {
-          localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+          localStream.current = await getMicStream();
         }
         const peer = createPeer(data.userId, false);
-        peer
-          .setRemoteDescription(data.offer)
+        peer.setRemoteDescription(data.offer)
           .then(() => peer.createAnswer())
           .then((answer) => peer.setLocalDescription(answer))
-          .then(() => {
-            send({
-              type: "voice_answer",
-              targetUserId: data.userId,
-              answer: peer.localDescription!,
-            });
-          })
+          .then(() => send({ type: "voice_answer", targetUserId: data.userId, answer: peer.localDescription! }))
           .catch(console.error);
       }
 
@@ -237,7 +236,7 @@ export function useVoice(
 
       if (data.type === "voice_ice") {
         const peer = peers.current[data.userId];
-        if (peer && peer.remoteDescription) {
+        if (peer?.remoteDescription) {
           peer.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
         }
       }
@@ -253,5 +252,6 @@ export function useVoice(
     leaveVoice,
     rejoinVoice,
     handleVoiceMessage,
+    localStream,
   };
 }

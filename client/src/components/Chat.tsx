@@ -77,7 +77,7 @@ export default function Chat() {
     messagesContainerRef,
   } = useMessages({ channel, send, currentUserId: user!.id, currentChannelRef, userRef });
 
-  const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, rejoinVoice, handleVoiceMessage } =
+  const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, rejoinVoice, handleVoiceMessage, localStream } =
     useVoice(send, user!.id);
 
   // Keep the ref in sync so the WS reconnect callback always calls the latest version
@@ -187,6 +187,7 @@ export default function Chat() {
               voiceChannel={voiceChannel}
               participants={participants}
               leaveVoice={leaveVoice}
+              localStream={localStream}
             />
           )}
           <MessageInput send={send} channel={channel} />
