@@ -36,14 +36,19 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
 
 async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStream> {
   try {
-    const { NoiseSupressor } = await import("@sapphi-red/web-noise-suppressor");
+    const mod = await import("@sapphi-red/web-noise-suppressor");
+    const NoiseSupressor = mod.NoiseSupressor ?? mod.default?.NoiseSupressor ?? mod.default;
 
     const audioCtx = new AudioContext({ sampleRate: 48000 });
 
     // The worklet must be a real fetchable URL — Vite cannot bundle AudioWorklet modules.
-    // scripts/copy-worklet.mjs copies the file to public/ before build.
-    // Use absolute origin URL to avoid issues with Vite's base: './' setting.
-    const workletUrl = `${window.location.origin}/workletProcessors.js`;
+    // scripts/copy-worklet.mjs copies the file to public/ (web) and dist/ (Electron).
+    // In Electron (file://) use a path relative to the current HTML file.
+    // In web (https://) use an absolute origin URL.
+    const isElectron = window.location.protocol === "file:";
+    const workletUrl = isElectron
+      ? new URL("workletProcessor.js", window.location.href).href
+      : `${window.location.origin}/workletProcessor.js`;
     await audioCtx.audioWorklet.addModule(workletUrl);
 
     const source = audioCtx.createMediaStreamSource(rawStream);
