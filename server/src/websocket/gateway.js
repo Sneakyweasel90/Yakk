@@ -26,10 +26,11 @@ function broadcast(channelId, data, excludeWs = null) {
   }
 }
 
-function broadcastAll(wss, data, excludeWs = null) {
+// Broadcast to ALL connected clients — no exclusion so sender sees their own presence update
+function broadcastAll(wss, data) {
   const payload = JSON.stringify(data);
   for (const client of wss.clients) {
-    if (client !== excludeWs && client.readyState === WebSocket.OPEN && !client._yakk_closed) {
+    if (client.readyState === WebSocket.OPEN && !client._yakk_closed) {
       client.send(payload);
     }
   }
@@ -157,7 +158,7 @@ export async function initWebSocket(server) {
           oldestId: messages.length > 0 ? messages[0].id : null,
         }));
 
-        // Send current voice channel occupancy snapshot
+        // Send current voice occupancy snapshot to newly joined client
         const voiceState = getVoiceState();
         if (Object.keys(voiceState).length > 0) {
           ws.send(JSON.stringify({ type: "voice_state", channels: voiceState }));
@@ -251,14 +252,14 @@ export async function initWebSocket(server) {
         if (!channels.has(`voice:${channelId}`)) channels.set(`voice:${channelId}`, new Set());
         const voiceClients = channels.get(`voice:${channelId}`);
 
-        // Send existing participants to joining user for WebRTC signalling
+        // Tell the joining user who's already there (for WebRTC)
         ws.send(JSON.stringify({
           type: "voice_participants",
           usernames: [...voiceClients].map(c => c.user.username),
           userIds: [...voiceClients].map(c => c.user.id),
         }));
 
-        // Tell people already in the channel to initiate WebRTC with new user
+        // Tell existing channel members a new user joined (for WebRTC)
         for (const client of voiceClients) {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({ type: "voice_user_joined", userId: user.id, username: user.username, channelId }));
@@ -266,8 +267,8 @@ export async function initWebSocket(server) {
 
         voiceClients.add(ws);
 
-        // Broadcast to ALL clients so everyone's sidebar updates
-        broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "join" }, ws);
+        // Broadcast to ALL clients INCLUDING sender so their own sidebar updates
+        broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "join" });
       }
 
       // PING
@@ -282,14 +283,14 @@ export async function initWebSocket(server) {
           const voiceClients = channels.get(`voice:${channelId}`);
           voiceClients?.delete(ws);
 
-          // Tell people in the channel for WebRTC cleanup
+          // Tell people still in channel (for WebRTC cleanup)
           for (const client of voiceClients || []) {
             if (client.readyState === WebSocket.OPEN)
               client.send(JSON.stringify({ type: "voice_user_left", userId: user.id, username: user.username }));
           }
 
-          // Broadcast to ALL clients so everyone's sidebar updates
-          broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "leave" }, ws);
+          // Broadcast to ALL clients INCLUDING sender so their own sidebar clears
+          broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "leave" });
 
           ws.voiceChannel = null;
         }
@@ -317,8 +318,8 @@ export async function initWebSocket(server) {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({ type: "voice_user_left", userId: user.id, username: user.username }));
         }
-        // Broadcast to ALL clients so everyone's sidebar updates
-        broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "leave" }, ws);
+        // Broadcast to all remaining clients (sender is gone so no point excluding)
+        broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "leave" });
       }
       await redis.sRem("online_users", String(user.id));
       await broadcastPresence(wss);

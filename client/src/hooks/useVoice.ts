@@ -55,8 +55,6 @@ async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStrea
   }
 }
 
-// Applies a GainNode to the local stream so we can control our own output volume.
-// Returns { processedStream, gainNode } — we keep gainNode to update it live.
 function applyGain(rawStream: MediaStream): { processedStream: MediaStream; gainNode: GainNode; audioCtx: AudioContext } {
   const audioCtx = new AudioContext();
   const source = audioCtx.createMediaStreamSource(rawStream);
@@ -65,7 +63,6 @@ function applyGain(rawStream: MediaStream): { processedStream: MediaStream; gain
   gainNode.gain.value = 1.0;
   source.connect(gainNode);
   gainNode.connect(destination);
-  // Merge processed audio with any video tracks
   const processedStream = new MediaStream([...destination.stream.getAudioTracks()]);
   return { processedStream, gainNode, audioCtx };
 }
@@ -77,14 +74,20 @@ async function getMicStream(): Promise<{ stream: MediaStream; gainNode: GainNode
   return { stream: processedStream, gainNode, audioCtx };
 }
 
-// Load persisted volume for a username (0–2 range, default 1)
-function loadVolume(username: string): number {
-  const val = localStorage.getItem(`yakk_vol_${username}`);
+function loadVolume(key: string): number {
+  const val = localStorage.getItem(`yakk_vol_${key}`);
   return val !== null ? parseFloat(val) : 1;
 }
 
-function saveVolume(username: string, vol: number) {
-  localStorage.setItem(`yakk_vol_${username}`, String(vol));
+function saveVolume(key: string, vol: number) {
+  localStorage.setItem(`yakk_vol_${key}`, String(vol));
+}
+
+// Per-participant audio pipeline: AudioContext + GainNode for volume above 1
+interface ParticipantAudio {
+  audioCtx: AudioContext;
+  gainNode: GainNode;
+  audioElement: HTMLAudioElement;
 }
 
 export function useVoice(
@@ -94,9 +97,7 @@ export function useVoice(
   const [inVoice, setInVoice] = useState(false);
   const [voiceChannel, setVoiceChannel] = useState<string | null>(null);
   const [participants, setParticipants] = useState<string[]>([]);
-  // participantVolumes: username -> 0..2 (1 = 100%)
   const [participantVolumes, setParticipantVolumes] = useState<Record<string, number>>({});
-  // selfVolume: 0..2 (1 = 100%)
   const [selfVolume, setSelfVolumeState] = useState<number>(() => loadVolume("__self__"));
 
   const { playJoin, playLeave } = useVoiceSounds();
@@ -105,8 +106,8 @@ export function useVoice(
   const selfGainNode = useRef<GainNode | null>(null);
   const selfAudioCtx = useRef<AudioContext | null>(null);
   const peers = useRef<Record<number, RTCPeerConnection>>({});
-  const audioElements = useRef<Record<number, HTMLAudioElement>>({});
-  // Maps userId -> username so we can look up volumes by username when audio arrives
+  // Each participant gets their own AudioContext+GainNode pipeline
+  const participantAudio = useRef<Record<number, ParticipantAudio>>({});
   const userIdToName = useRef<Record<number, string>>({});
 
   const createPeer = useCallback(
@@ -131,17 +132,31 @@ export function useVoice(
       };
 
       peer.ontrack = (e) => {
-        let audio = audioElements.current[targetUserId];
-        if (!audio) {
-          audio = new Audio();
-          audio.autoplay = true;
-          audioElements.current[targetUserId] = audio;
+        // Clean up any existing audio pipeline for this user
+        if (participantAudio.current[targetUserId]) {
+          participantAudio.current[targetUserId].audioElement.srcObject = null;
+          participantAudio.current[targetUserId].audioCtx.close();
+          delete participantAudio.current[targetUserId];
         }
-        audio.srcObject = e.streams[0];
-        // Apply persisted volume for this participant
+
+        // Route audio through GainNode so we can boost above 1.0
+        const audioCtx = new AudioContext();
+        const gainNode = audioCtx.createGain();
         const username = userIdToName.current[targetUserId];
-        audio.volume = username ? loadVolume(username) : 1;
-        audio.play().catch(() => {});
+        gainNode.gain.value = username ? loadVolume(username) : 1;
+
+        const source = audioCtx.createMediaStreamSource(e.streams[0]);
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        // Still need an audio element to trigger autoplay permission
+        const audioElement = new Audio();
+        audioElement.srcObject = e.streams[0];
+        audioElement.volume = 0; // muted — GainNode handles the actual output
+        audioElement.autoplay = true;
+        audioElement.play().catch(() => {});
+
+        participantAudio.current[targetUserId] = { audioCtx, gainNode, audioElement };
       };
 
       peer.onconnectionstatechange = () => {
@@ -157,7 +172,11 @@ export function useVoice(
           }
         }
         if (state === "closed") {
-          delete audioElements.current[targetUserId];
+          if (participantAudio.current[targetUserId]) {
+            participantAudio.current[targetUserId].audioElement.srcObject = null;
+            participantAudio.current[targetUserId].audioCtx.close();
+            delete participantAudio.current[targetUserId];
+          }
         }
       };
 
@@ -186,8 +205,11 @@ export function useVoice(
     selfAudioCtx.current = null;
     Object.values(peers.current).forEach((p) => p.close());
     peers.current = {};
-    Object.values(audioElements.current).forEach((a) => { a.srcObject = null; });
-    audioElements.current = {};
+    Object.values(participantAudio.current).forEach(({ audioElement, audioCtx }) => {
+      audioElement.srcObject = null;
+      audioCtx.close();
+    });
+    participantAudio.current = {};
     userIdToName.current = {};
     setInVoice(false);
     setVoiceChannel(null);
@@ -206,7 +228,6 @@ export function useVoice(
         localStream.current = stream;
         selfGainNode.current = gainNode;
         selfAudioCtx.current = audioCtx;
-        // Apply persisted self volume
         gainNode.gain.value = loadVolume("__self__");
         setInVoice(true);
         setVoiceChannel(channelId);
@@ -234,19 +255,17 @@ export function useVoice(
     send({ type: "voice_join", channelId: channel });
   }, [voiceChannel, send]);
 
-  // Set volume for a specific participant (0–2)
   const setParticipantVolume = useCallback((username: string, volume: number) => {
     const clamped = Math.max(0, Math.min(2, volume));
     saveVolume(username, clamped);
     setParticipantVolumes((prev) => ({ ...prev, [username]: clamped }));
-    // Find the audio element for this user and update it live
+    // Find userId for this username and update their GainNode live
     const userId = Object.entries(userIdToName.current).find(([, name]) => name === username)?.[0];
-    if (userId && audioElements.current[Number(userId)]) {
-      audioElements.current[Number(userId)].volume = clamped;
+    if (userId && participantAudio.current[Number(userId)]) {
+      participantAudio.current[Number(userId)].gainNode.gain.value = clamped;
     }
   }, []);
 
-  // Set our own microphone output volume (0–2)
   const setSelfVolume = useCallback((volume: number) => {
     const clamped = Math.max(0, Math.min(2, volume));
     saveVolume("__self__", clamped);
@@ -260,13 +279,11 @@ export function useVoice(
     async (data: ServerMessage) => {
       if (data.type === "voice_participants") {
         setParticipants(data.usernames);
-        // Build userId->name map from the participants list + userIds
         data.userIds.forEach((userId: number, i: number) => {
           userIdToName.current[userId] = data.usernames[i];
         });
-        // Initialise volumes from localStorage
         const vols: Record<string, number> = {};
-        data.usernames.forEach((name) => { vols[name] = loadVolume(name); });
+        data.usernames.forEach((name: string) => { vols[name] = loadVolume(name); });
         setParticipantVolumes(vols);
         data.userIds.forEach((userId: number) => createPeer(userId, true));
       }
@@ -294,9 +311,10 @@ export function useVoice(
         });
         peers.current[data.userId]?.close();
         delete peers.current[data.userId];
-        if (audioElements.current[data.userId]) {
-          audioElements.current[data.userId].srcObject = null;
-          delete audioElements.current[data.userId];
+        if (participantAudio.current[data.userId]) {
+          participantAudio.current[data.userId].audioElement.srcObject = null;
+          participantAudio.current[data.userId].audioCtx.close();
+          delete participantAudio.current[data.userId];
         }
         playLeave();
       }
