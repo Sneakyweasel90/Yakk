@@ -36,11 +36,15 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
 
 async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStream> {
   try {
-    const { NoiseSupressor, NoiseSupressorWorklet } = await import(
-      "@sapphi-red/web-noise-suppressor"
-    );
+    const { NoiseSupressor } = await import("@sapphi-red/web-noise-suppressor");
+
     const audioCtx = new AudioContext({ sampleRate: 48000 });
-    await audioCtx.audioWorklet.addModule(NoiseSupressorWorklet);
+
+    // The worklet must be loaded from a real URL — Vite can't bundle AudioWorklet modules.
+    // vite.config.ts copies workletProcessors.js from the package into /public so it's
+    // available at this path in both dev and production.
+    await audioCtx.audioWorklet.addModule("/workletProcessors.js");
+
     const source = audioCtx.createMediaStreamSource(rawStream);
     const destination = audioCtx.createMediaStreamDestination();
     const suppressor = new NoiseSupressor(audioCtx);
