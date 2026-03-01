@@ -26,6 +26,7 @@ export default function Chat() {
 
   const [channel, setChannel] = useState("general");
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [voiceOccupancy, setVoiceOccupancy] = useState<Record<string, string[]>>({});
   const [showSearch, setShowSearch] = useState(false);
   const [pickerMsgId, setPickerMsgId] = useState<number | null>(null);
   const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
@@ -58,7 +59,35 @@ export default function Chat() {
   const { send, disconnect } = useWebSocket(
     user!.token,
     (data) => {
-      if (data.type?.startsWith("voice_")) handleVoiceMessage(data);
+      if (data.type?.startsWith("voice_")) {
+        // Full snapshot of who's in each voice channel — sent on connect
+        if (data.type === "voice_state") {
+          setVoiceOccupancy(data.channels);
+          return;
+        }
+        // Someone joined or left a voice channel globally
+        if (data.type === "voice_presence_update") {
+          setVoiceOccupancy((prev) => {
+            const current = prev[data.channelId] ?? [];
+            if (data.action === "join") {
+              return {
+                ...prev,
+                [data.channelId]: current.includes(data.username)
+                  ? current
+                  : [...current, data.username],
+              };
+            } else {
+              const updated = current.filter((u) => u !== data.username);
+              const next = { ...prev };
+              if (updated.length === 0) delete next[data.channelId];
+              else next[data.channelId] = updated;
+              return next;
+            }
+          });
+          return;
+        }
+        handleVoiceMessage(data);
+      }
       else if (data.type === "presence") setOnlineUsers(data.users);
       else handleMessage(data);
     },
@@ -125,6 +154,7 @@ export default function Chat() {
             avatar={user!.avatar ?? null}
             onNicknameChange={updateNickname}
             onAvatarChange={updateAvatar}
+            voiceOccupancy={voiceOccupancy}
           />
         </ResizableSidebar>
 

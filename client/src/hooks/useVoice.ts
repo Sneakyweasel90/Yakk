@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from "react";
 import type { ClientMessage, ServerMessage } from "../types";
+import { useVoiceSounds } from "./useVoiceSounds";
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
@@ -77,6 +78,7 @@ export function useVoice(
   const [inVoice, setInVoice] = useState(false);
   const [voiceChannel, setVoiceChannel] = useState<string | null>(null);
   const [participants, setParticipants] = useState<string[]>([]);
+  const { playJoin, playLeave } = useVoiceSounds();
 
   const localStream = useRef<MediaStream | null>(null);
   const peers = useRef<Record<number, RTCPeerConnection>>({});
@@ -206,6 +208,7 @@ export function useVoice(
           prev.includes(data.username) ? prev : [...prev, data.username]
         );
         createPeer(data.userId, false);
+        playJoin();
       }
 
       if (data.type === "voice_user_left") {
@@ -216,6 +219,7 @@ export function useVoice(
           audioElements.current[data.userId].srcObject = null;
           delete audioElements.current[data.userId];
         }
+        playLeave();
       }
 
       if (data.type === "voice_offer") {

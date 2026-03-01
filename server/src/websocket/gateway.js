@@ -26,10 +26,18 @@ function broadcast(channelId, data, excludeWs = null) {
   }
 }
 
+function broadcastAll(wss, data, excludeWs = null) {
+  const payload = JSON.stringify(data);
+  for (const client of wss.clients) {
+    if (client !== excludeWs && client.readyState === WebSocket.OPEN && !client._yakk_closed) {
+      client.send(payload);
+    }
+  }
+}
+
 async function broadcastPresence(wss) {
   const liveUserIds = new Set();
   for (const client of wss.clients) {
-    // Only count fully open connections — exclude CLOSING/CLOSED sockets
     if (client.readyState === WebSocket.OPEN && !client._yakk_closed && client.user?.id) {
       liveUserIds.add(String(client.user.id));
     }
@@ -58,7 +66,17 @@ async function broadcastPresence(wss) {
   }
 }
 
-// Fetch reaction counts for a message, returns array of {emoji, count, users}
+function getVoiceState() {
+  const state = {};
+  for (const [key, clients] of channels.entries()) {
+    if (!key.startsWith("voice:")) continue;
+    const channelId = key.replace("voice:", "");
+    const names = [...clients].map(c => c.user?.username).filter(Boolean);
+    if (names.length > 0) state[channelId] = names;
+  }
+  return state;
+}
+
 async function getReactions(messageId) {
   const { rows } = await db.query(
     `SELECT r.emoji,
@@ -74,7 +92,6 @@ async function getReactions(messageId) {
   return rows;
 }
 
-// Attach reactions to an array of messages
 async function attachReactions(messages) {
   if (messages.length === 0) return messages;
   const ids = messages.map(m => m.id);
@@ -89,7 +106,6 @@ async function attachReactions(messages) {
      ORDER BY MIN(r.created_at)`,
     [ids]
   );
-  // Group by message_id
   const byMsg = {};
   for (const row of rows) {
     if (!byMsg[row.message_id]) byMsg[row.message_id] = [];
@@ -140,6 +156,12 @@ export async function initWebSocket(server) {
           hasMore: rows.length === 50,
           oldestId: messages.length > 0 ? messages[0].id : null,
         }));
+
+        // Send current voice channel occupancy snapshot
+        const voiceState = getVoiceState();
+        if (Object.keys(voiceState).length > 0) {
+          ws.send(JSON.stringify({ type: "voice_state", channels: voiceState }));
+        }
       }
 
       // LOAD MORE
@@ -170,7 +192,6 @@ export async function initWebSocket(server) {
         }
         const { channelId, content } = msg;
         if (!content?.trim()) return;
-        // Use nickname if set, otherwise fall back to username
         const { rows: uRows } = await db.query(
           `SELECT COALESCE(nickname, username) AS display_name FROM users WHERE id = $1`,
           [user.id]
@@ -181,24 +202,21 @@ export async function initWebSocket(server) {
            VALUES ($1, $2, $3, $4) RETURNING *`,
           [channelId, user.id, displayName, content.trim()]
         );
-        // Fetch raw username to include alongside display name
         const { rows: uRaw } = await db.query(`SELECT username FROM users WHERE id = $1`, [user.id]);
         broadcast(channelId, { type: "message", message: { ...rows[0], raw_username: uRaw[0]?.username || user.username, reactions: [] } });
       }
 
-      // REACT — toggle a reaction on a message
+      // REACT
       if (msg.type === "react") {
         const { messageId, emoji } = msg;
         if (!messageId || !emoji) return;
 
-        // Verify message exists and get its channel
         const { rows: msgRows } = await db.query(
           `SELECT channel_id FROM messages WHERE id = $1`, [messageId]
         );
         if (!msgRows[0]) return;
         const channelId = msgRows[0].channel_id;
 
-        // Toggle: if user already reacted with this emoji, remove it; otherwise add it
         const { rows: existing } = await db.query(
           `SELECT id FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
           [messageId, user.id, emoji]
@@ -232,21 +250,27 @@ export async function initWebSocket(server) {
         ws.voiceChannel = channelId;
         if (!channels.has(`voice:${channelId}`)) channels.set(`voice:${channelId}`, new Set());
         const voiceClients = channels.get(`voice:${channelId}`);
-        
-        // Send both usernames AND userIds to the joining user
-        ws.send(JSON.stringify({ 
-          type: "voice_participants", 
+
+        // Send existing participants to joining user for WebRTC signalling
+        ws.send(JSON.stringify({
+          type: "voice_participants",
           usernames: [...voiceClients].map(c => c.user.username),
-          userIds: [...voiceClients].map(c => c.user.id)
+          userIds: [...voiceClients].map(c => c.user.id),
         }));
-        
+
+        // Tell people already in the channel to initiate WebRTC with new user
         for (const client of voiceClients) {
           if (client.readyState === WebSocket.OPEN)
-            client.send(JSON.stringify({ type: "voice_user_joined", userId: user.id, username: user.username }));
+            client.send(JSON.stringify({ type: "voice_user_joined", userId: user.id, username: user.username, channelId }));
         }
+
         voiceClients.add(ws);
+
+        // Broadcast to ALL clients so everyone's sidebar updates
+        broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "join" }, ws);
       }
 
+      // PING
       if (msg.type === "ping") {
         ws.send(JSON.stringify({ type: "pong" }));
       }
@@ -254,12 +278,19 @@ export async function initWebSocket(server) {
       // VOICE leave
       if (msg.type === "voice_leave") {
         if (ws.voiceChannel) {
-          const voiceClients = channels.get(`voice:${ws.voiceChannel}`);
+          const channelId = ws.voiceChannel;
+          const voiceClients = channels.get(`voice:${channelId}`);
           voiceClients?.delete(ws);
+
+          // Tell people in the channel for WebRTC cleanup
           for (const client of voiceClients || []) {
             if (client.readyState === WebSocket.OPEN)
               client.send(JSON.stringify({ type: "voice_user_left", userId: user.id, username: user.username }));
           }
+
+          // Broadcast to ALL clients so everyone's sidebar updates
+          broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "leave" }, ws);
+
           ws.voiceChannel = null;
         }
       }
@@ -276,19 +307,20 @@ export async function initWebSocket(server) {
     });
 
     ws.on("close", async () => {
-      // Mark this socket as closed immediately before presence broadcast
       ws._yakk_closed = true;
       for (const channelId of ws.channels) channels.get(channelId)?.delete(ws);
       if (ws.voiceChannel) {
-        const vc = channels.get(`voice:${ws.voiceChannel}`);
+        const channelId = ws.voiceChannel;
+        const vc = channels.get(`voice:${channelId}`);
         vc?.delete(ws);
         for (const client of vc || []) {
           if (client.readyState === WebSocket.OPEN)
             client.send(JSON.stringify({ type: "voice_user_left", userId: user.id, username: user.username }));
         }
+        // Broadcast to ALL clients so everyone's sidebar updates
+        broadcastAll(wss, { type: "voice_presence_update", channelId, username: user.username, action: "leave" }, ws);
       }
       await redis.sRem("online_users", String(user.id));
-      // Broadcast immediately, then again after a tick to catch any race with CLOSING state
       await broadcastPresence(wss);
       setTimeout(() => broadcastPresence(wss), 500);
     });

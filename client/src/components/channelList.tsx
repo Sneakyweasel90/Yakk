@@ -56,6 +56,7 @@ interface ChannelListProps {
   creating: boolean;
   showCreateText: boolean;
   showCreateVoice: boolean;
+  voiceOccupancy: Record<string, string[]>;
   onSelectChannel: (name: string) => void;
   onJoinVoice: (name: string) => void;
   onLeaveVoice: () => void;
@@ -71,6 +72,7 @@ export default function ChannelList({
   textChannels, voiceChannels,
   activeChannel, voiceChannel, participants, username,
   newChannelName, creating, showCreateText, showCreateVoice,
+  voiceOccupancy,
   onSelectChannel, onJoinVoice, onLeaveVoice, onDeleteChannel,
   onToggleCreateText, onToggleCreateVoice,
   onChannelNameChange, onCreateChannel, onCancelCreate,
@@ -163,45 +165,64 @@ export default function ChannelList({
         />
       )}
 
-      {voiceChannels.map(ch => (
-        <div key={ch.id} style={{ flexDirection: "column", alignItems: "stretch" }}>
-          <div style={{ display: "flex", alignItems: "center", paddingRight: "0.5rem" }}>
-            <div
-              onClick={() => voiceChannel === ch.name ? onLeaveVoice() : onJoinVoice(ch.name)}
-              style={{ ...channelStyle(ch.name === voiceChannel), flex: 1 }}
-            >
-              <span style={{ color: theme.textDim }}>◈</span>
-              <span style={{ flex: 1 }}>{ch.name.replace("voice-", "")}</span>
+      {voiceChannels.map(ch => {
+        // Use voiceOccupancy for everyone's view (server-authoritative).
+        // Fall back to local participants if we're in the channel and occupancy
+        // hasn't arrived yet (covers the brief moment between joining and first broadcast).
+        const occupants: string[] = voiceOccupancy[ch.name] ??
+          (ch.name === voiceChannel ? [username, ...participants] : []);
+
+        return (
+          <div key={ch.id} style={{ flexDirection: "column", alignItems: "stretch" }}>
+            <div style={{ display: "flex", alignItems: "center", paddingRight: "0.5rem" }}>
+              <div
+                onClick={() => voiceChannel === ch.name ? onLeaveVoice() : onJoinVoice(ch.name)}
+                style={{ ...channelStyle(ch.name === voiceChannel), flex: 1 }}
+              >
+                <span style={{ color: theme.textDim }}>◈</span>
+                <span style={{ flex: 1 }}>{ch.name.replace("voice-", "")}</span>
+                {/* Show occupant count when channel has people and you're not in it */}
+                {occupants.length > 0 && ch.name !== voiceChannel && (
+                  <span style={{
+                    fontSize: "0.55rem", fontFamily: "'Share Tech Mono', monospace",
+                    color: theme.primary, opacity: 0.7,
+                  }}>
+                    {occupants.length}
+                  </span>
+                )}
+              </div>
+              {ch.name === voiceChannel && (
+                <span style={{
+                  fontSize: "0.5rem", borderRadius: "2px", padding: "1px 4px",
+                  fontFamily: "'Share Tech Mono', monospace", letterSpacing: "0.1em",
+                  border: "1px solid", flexShrink: 0,
+                  color: theme.primary, borderColor: theme.primaryDim, background: theme.primaryGlow,
+                }}>
+                  LIVE
+                </span>
+              )}
+              {ch.created_by !== null && (
+                <span
+                  onClick={e => onDeleteChannel(ch.id, e)}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1rem", lineHeight: 1, opacity: 0.4, padding: "0", flexShrink: 0, color: theme.textDim }}
+                  title="Delete channel"
+                >×</span>
+              )}
             </div>
-            {ch.name === voiceChannel && (
-              <span style={{
-                fontSize: "0.5rem", borderRadius: "2px", padding: "1px 4px",
-                fontFamily: "'Share Tech Mono', monospace", letterSpacing: "0.1em",
-                border: "1px solid", flexShrink: 0,
-                color: theme.primary, borderColor: theme.primaryDim, background: theme.primaryGlow,
-              }}>
-                LIVE
-              </span>
-            )}
-            {ch.created_by !== null && (
-              <span
-                onClick={e => onDeleteChannel(ch.id, e)}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1rem", lineHeight: 1, opacity: 0.4, padding: "0", flexShrink: 0, color: theme.textDim }}
-                title="Delete channel"
-              >×</span>
-            )}
+
+            {/* Show all occupants regardless of whether you're in the channel */}
+            {occupants.map(name => (
+              <div key={name} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.2rem 1rem 0.2rem 2.5rem" }}>
+                <Avatar username={name} size={18} />
+                <span style={{ fontSize: "0.75rem", color: theme.textDim, fontFamily: "'Share Tech Mono', monospace" }}>
+                  {name}
+                </span>
+                <span style={{ fontSize: "0.55rem", color: "#4ade80" }}>🎙</span>
+              </div>
+            ))}
           </div>
-          {ch.name === voiceChannel && [username, ...participants].map(name => (
-            <div key={name} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.2rem 1rem 0.2rem 2.5rem" }}>
-              <Avatar username={name} size={18} />
-              <span style={{ fontSize: "0.75rem", color: theme.textDim, fontFamily: "'Share Tech Mono', monospace" }}>
-                {name}
-              </span>
-              <span style={{ fontSize: "0.55rem", color: "#4ade80" }}>🎙</span>
-            </div>
-          ))}
-        </div>
-      ))}
+        );
+      })}
     </>
   );
 }

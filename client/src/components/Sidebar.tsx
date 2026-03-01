@@ -1,6 +1,6 @@
 import { useTheme } from "../context/ThemeContext";
 import { useChannels } from "../hooks/useChannels";
-import ChannelList from "./channelList";
+import ChannelList from "./ChannelList";
 import SidebarFooter from "./SidebarFooter";
 import type { OnlineUser } from "../types";
 
@@ -21,12 +21,14 @@ interface Props {
   onNicknameChange: (nickname: string | null) => void;
   onAvatarChange: (avatar: string | null) => void;
   participants: string[];
+  voiceOccupancy: Record<string, string[]>;
 }
 
 export default function Sidebar({
   channel, setChannel, voiceChannel, joinVoice, leaveVoice,
   logout, username, nickname, avatar, userId, token,
-  onlineUsers, onSearchOpen, onNicknameChange, onAvatarChange, participants,
+  onlineUsers, onSearchOpen, onNicknameChange, onAvatarChange,
+  participants, voiceOccupancy,
 }: Props) {
   const { theme } = useTheme();
   const {
@@ -96,6 +98,7 @@ export default function Sidebar({
         onChannelNameChange={setNewChannelName}
         onCreateChannel={createChannel}
         onCancelCreate={cancelCreate}
+        voiceOccupancy={voiceOccupancy}
       />
 
       <SidebarFooter
