@@ -40,10 +40,11 @@ async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStrea
 
     const audioCtx = new AudioContext({ sampleRate: 48000 });
 
-    // The worklet must be loaded from a real URL — Vite can't bundle AudioWorklet modules.
-    // vite.config.ts copies workletProcessors.js from the package into /public so it's
-    // available at this path in both dev and production.
-    await audioCtx.audioWorklet.addModule("/workletProcessors.js");
+    // The worklet must be a real fetchable URL — Vite cannot bundle AudioWorklet modules.
+    // scripts/copy-worklet.mjs copies the file to public/ before build.
+    // Use absolute origin URL to avoid issues with Vite's base: './' setting.
+    const workletUrl = `${window.location.origin}/workletProcessors.js`;
+    await audioCtx.audioWorklet.addModule(workletUrl);
 
     const source = audioCtx.createMediaStreamSource(rawStream);
     const destination = audioCtx.createMediaStreamDestination();
