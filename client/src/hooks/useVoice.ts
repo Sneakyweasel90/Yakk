@@ -28,34 +28,25 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
-// Chromium handles echo cancellation and gain — RNNoise handles noise suppression
 const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
   autoGainControl: true,
   noiseSuppression: false,
 };
 
-// Pipes mic stream through @sapphi-red/web-noise-suppressor (RNNoise via WASM).
-// Falls back to raw stream if it fails to load.
 async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStream> {
   try {
     const { NoiseSupressor, NoiseSupressorWorklet } = await import(
       "@sapphi-red/web-noise-suppressor"
     );
-
     const audioCtx = new AudioContext({ sampleRate: 48000 });
-
     await audioCtx.audioWorklet.addModule(NoiseSupressorWorklet);
-
     const source = audioCtx.createMediaStreamSource(rawStream);
     const destination = audioCtx.createMediaStreamDestination();
-
     const suppressor = new NoiseSupressor(audioCtx);
     await suppressor.init();
-
     source.connect(suppressor.getNode());
     suppressor.getNode().connect(destination);
-
     console.log("Noise suppression active (RNNoise WASM)");
     return destination.stream;
   } catch (err) {
@@ -64,11 +55,36 @@ async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStrea
   }
 }
 
-async function getMicStream(): Promise<MediaStream> {
-  const rawStream = await navigator.mediaDevices.getUserMedia({
-    audio: AUDIO_CONSTRAINTS,
-  });
-  return applyNoiseSuppression(rawStream);
+// Applies a GainNode to the local stream so we can control our own output volume.
+// Returns { processedStream, gainNode } — we keep gainNode to update it live.
+function applyGain(rawStream: MediaStream): { processedStream: MediaStream; gainNode: GainNode; audioCtx: AudioContext } {
+  const audioCtx = new AudioContext();
+  const source = audioCtx.createMediaStreamSource(rawStream);
+  const gainNode = audioCtx.createGain();
+  const destination = audioCtx.createMediaStreamDestination();
+  gainNode.gain.value = 1.0;
+  source.connect(gainNode);
+  gainNode.connect(destination);
+  // Merge processed audio with any video tracks
+  const processedStream = new MediaStream([...destination.stream.getAudioTracks()]);
+  return { processedStream, gainNode, audioCtx };
+}
+
+async function getMicStream(): Promise<{ stream: MediaStream; gainNode: GainNode; audioCtx: AudioContext }> {
+  const rawStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
+  const noiseFree = await applyNoiseSuppression(rawStream);
+  const { processedStream, gainNode, audioCtx } = applyGain(noiseFree);
+  return { stream: processedStream, gainNode, audioCtx };
+}
+
+// Load persisted volume for a username (0–2 range, default 1)
+function loadVolume(username: string): number {
+  const val = localStorage.getItem(`yakk_vol_${username}`);
+  return val !== null ? parseFloat(val) : 1;
+}
+
+function saveVolume(username: string, vol: number) {
+  localStorage.setItem(`yakk_vol_${username}`, String(vol));
 }
 
 export function useVoice(
@@ -78,11 +94,20 @@ export function useVoice(
   const [inVoice, setInVoice] = useState(false);
   const [voiceChannel, setVoiceChannel] = useState<string | null>(null);
   const [participants, setParticipants] = useState<string[]>([]);
+  // participantVolumes: username -> 0..2 (1 = 100%)
+  const [participantVolumes, setParticipantVolumes] = useState<Record<string, number>>({});
+  // selfVolume: 0..2 (1 = 100%)
+  const [selfVolume, setSelfVolumeState] = useState<number>(() => loadVolume("__self__"));
+
   const { playJoin, playLeave } = useVoiceSounds();
 
   const localStream = useRef<MediaStream | null>(null);
+  const selfGainNode = useRef<GainNode | null>(null);
+  const selfAudioCtx = useRef<AudioContext | null>(null);
   const peers = useRef<Record<number, RTCPeerConnection>>({});
   const audioElements = useRef<Record<number, HTMLAudioElement>>({});
+  // Maps userId -> username so we can look up volumes by username when audio arrives
+  const userIdToName = useRef<Record<number, string>>({});
 
   const createPeer = useCallback(
     (targetUserId: number, isInitiator: boolean): RTCPeerConnection => {
@@ -113,6 +138,9 @@ export function useVoice(
           audioElements.current[targetUserId] = audio;
         }
         audio.srcObject = e.streams[0];
+        // Apply persisted volume for this participant
+        const username = userIdToName.current[targetUserId];
+        audio.volume = username ? loadVolume(username) : 1;
         audio.play().catch(() => {});
       };
 
@@ -153,13 +181,18 @@ export function useVoice(
   const cleanup = useCallback(() => {
     localStream.current?.getTracks().forEach((t) => t.stop());
     localStream.current = null;
+    selfGainNode.current = null;
+    selfAudioCtx.current?.close();
+    selfAudioCtx.current = null;
     Object.values(peers.current).forEach((p) => p.close());
     peers.current = {};
     Object.values(audioElements.current).forEach((a) => { a.srcObject = null; });
     audioElements.current = {};
+    userIdToName.current = {};
     setInVoice(false);
     setVoiceChannel(null);
     setParticipants([]);
+    setParticipantVolumes({});
   }, []);
 
   const joinVoice = useCallback(
@@ -169,7 +202,12 @@ export function useVoice(
         cleanup();
       }
       try {
-        localStream.current = await getMicStream();
+        const { stream, gainNode, audioCtx } = await getMicStream();
+        localStream.current = stream;
+        selfGainNode.current = gainNode;
+        selfAudioCtx.current = audioCtx;
+        // Apply persisted self volume
+        gainNode.gain.value = loadVolume("__self__");
         setInVoice(true);
         setVoiceChannel(channelId);
         send({ type: "voice_join", channelId });
@@ -196,23 +234,64 @@ export function useVoice(
     send({ type: "voice_join", channelId: channel });
   }, [voiceChannel, send]);
 
+  // Set volume for a specific participant (0–2)
+  const setParticipantVolume = useCallback((username: string, volume: number) => {
+    const clamped = Math.max(0, Math.min(2, volume));
+    saveVolume(username, clamped);
+    setParticipantVolumes((prev) => ({ ...prev, [username]: clamped }));
+    // Find the audio element for this user and update it live
+    const userId = Object.entries(userIdToName.current).find(([, name]) => name === username)?.[0];
+    if (userId && audioElements.current[Number(userId)]) {
+      audioElements.current[Number(userId)].volume = clamped;
+    }
+  }, []);
+
+  // Set our own microphone output volume (0–2)
+  const setSelfVolume = useCallback((volume: number) => {
+    const clamped = Math.max(0, Math.min(2, volume));
+    saveVolume("__self__", clamped);
+    setSelfVolumeState(clamped);
+    if (selfGainNode.current) {
+      selfGainNode.current.gain.value = clamped;
+    }
+  }, []);
+
   const handleVoiceMessage = useCallback(
     async (data: ServerMessage) => {
       if (data.type === "voice_participants") {
         setParticipants(data.usernames);
+        // Build userId->name map from the participants list + userIds
+        data.userIds.forEach((userId: number, i: number) => {
+          userIdToName.current[userId] = data.usernames[i];
+        });
+        // Initialise volumes from localStorage
+        const vols: Record<string, number> = {};
+        data.usernames.forEach((name) => { vols[name] = loadVolume(name); });
+        setParticipantVolumes(vols);
         data.userIds.forEach((userId: number) => createPeer(userId, true));
       }
 
       if (data.type === "voice_user_joined") {
+        userIdToName.current[data.userId] = data.username;
         setParticipants((prev) =>
           prev.includes(data.username) ? prev : [...prev, data.username]
         );
+        setParticipantVolumes((prev) => ({
+          ...prev,
+          [data.username]: loadVolume(data.username),
+        }));
         createPeer(data.userId, false);
         playJoin();
       }
 
       if (data.type === "voice_user_left") {
+        delete userIdToName.current[data.userId];
         setParticipants((prev) => prev.filter((u) => u !== data.username));
+        setParticipantVolumes((prev) => {
+          const next = { ...prev };
+          delete next[data.username];
+          return next;
+        });
         peers.current[data.userId]?.close();
         delete peers.current[data.userId];
         if (audioElements.current[data.userId]) {
@@ -224,7 +303,11 @@ export function useVoice(
 
       if (data.type === "voice_offer") {
         if (!localStream.current) {
-          localStream.current = await getMicStream();
+          const { stream, gainNode, audioCtx } = await getMicStream();
+          localStream.current = stream;
+          selfGainNode.current = gainNode;
+          selfAudioCtx.current = audioCtx;
+          gainNode.gain.value = loadVolume("__self__");
         }
         const peer = createPeer(data.userId, false);
         peer.setRemoteDescription(data.offer)
@@ -245,17 +328,21 @@ export function useVoice(
         }
       }
     },
-    [createPeer, send]
+    [createPeer, send, playJoin, playLeave]
   );
 
   return {
     inVoice,
     voiceChannel,
     participants,
+    participantVolumes,
+    selfVolume,
     joinVoice,
     leaveVoice,
     rejoinVoice,
     handleVoiceMessage,
     localStream,
+    setParticipantVolume,
+    setSelfVolume,
   };
 }

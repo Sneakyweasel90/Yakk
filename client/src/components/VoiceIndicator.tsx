@@ -6,11 +6,65 @@ interface Props {
   inVoice: boolean;
   voiceChannel: string | null;
   participants: string[];
+  participantVolumes: Record<string, number>;
+  selfVolume: number;
   leaveVoice: () => void;
   localStream: MutableRefObject<MediaStream | null>;
+  setParticipantVolume: (username: string, volume: number) => void;
+  setSelfVolume: (volume: number) => void;
 }
 
-export default function VoiceIndicator({ inVoice, voiceChannel, participants, leaveVoice, localStream }: Props) {
+function VolumeSlider({
+  label,
+  value,
+  onChange,
+  color,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  color: string;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", minWidth: "60px" }}>
+      <span style={{
+        fontSize: "0.58rem", fontFamily: "'Share Tech Mono', monospace",
+        color, letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden",
+        textOverflow: "ellipsis", maxWidth: "72px", textAlign: "center",
+      }}>
+        {label}
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={2}
+        step={0.05}
+        value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        style={{
+          width: "64px",
+          accentColor: color,
+          cursor: "pointer",
+          height: "3px",
+        }}
+        title={`${Math.round(value * 100)}%`}
+      />
+      <span style={{
+        fontSize: "0.55rem", fontFamily: "'Share Tech Mono', monospace",
+        color, opacity: 0.6,
+      }}>
+        {Math.round(value * 100)}%
+      </span>
+    </div>
+  );
+}
+
+export default function VoiceIndicator({
+  inVoice, voiceChannel, participants,
+  participantVolumes, selfVolume,
+  leaveVoice, localStream,
+  setParticipantVolume, setSelfVolume,
+}: Props) {
   const { theme } = useTheme();
   const {
     isMuted,
@@ -49,12 +103,12 @@ export default function VoiceIndicator({ inVoice, voiceChannel, participants, le
       background: theme.surface,
       borderTop: `1px solid ${theme.border}`,
       display: "flex",
-      alignItems: "center",
-      gap: "0.6rem",
+      alignItems: "flex-start",
+      gap: "0.75rem",
       flexWrap: "wrap",
     }}>
       {/* Status dot + channel name */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", paddingTop: "6px" }}>
         <span style={{
           width: "7px", height: "7px", borderRadius: "50%",
           background: "#4ade80", boxShadow: "0 0 6px #4ade80",
@@ -68,22 +122,29 @@ export default function VoiceIndicator({ inVoice, voiceChannel, participants, le
         </span>
       </div>
 
-      {/* Participants */}
-      {participants.length > 0 && (
-        <div style={{ display: "flex", gap: "0.4rem", flex: 1, flexWrap: "wrap" }}>
-          {participants.map((name) => (
-            <span key={name} style={{
-              color: theme.textDim, fontSize: "0.72rem",
-              fontFamily: "'Share Tech Mono', monospace",
-            }}>
-              🎙 {name}
-            </span>
-          ))}
-        </div>
-      )}
+      {/* Volume sliders — self + each participant */}
+      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", flex: 1 }}>
+        {/* Self volume */}
+        <VolumeSlider
+          label="YOU"
+          value={selfVolume}
+          onChange={setSelfVolume}
+          color={theme.primary}
+        />
+        {/* Per-participant sliders */}
+        {participants.map((name) => (
+          <VolumeSlider
+            key={name}
+            label={name}
+            value={participantVolumes[name] ?? 1}
+            onChange={(v) => setParticipantVolume(name, v)}
+            color={theme.textDim}
+          />
+        ))}
+      </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginLeft: "auto" }}>
-
+      {/* Controls on the right */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", paddingTop: "4px" }}>
         {/* PTT active indicator */}
         {mode === "ptt" && (
           <span style={{
@@ -98,7 +159,7 @@ export default function VoiceIndicator({ inVoice, voiceChannel, participants, le
           </span>
         )}
 
-        {/* Mute button (only in open mic mode) */}
+        {/* Mute button (open mic mode only) */}
         {mode === "open" && (
           <button
             onClick={toggleMute}
@@ -118,60 +179,43 @@ export default function VoiceIndicator({ inVoice, voiceChannel, participants, le
         <button
           onClick={toggleMode}
           title={mode === "open" ? "Switch to Push to Talk" : "Switch to Open Mic"}
-          style={{
-            ...btnBase,
-            color: theme.textDim,
-            borderColor: theme.border,
-            background: "transparent",
-          }}
+          style={{ ...btnBase, color: theme.textDim, borderColor: theme.border, background: "transparent" }}
         >
           {mode === "open" ? "PTT" : "OPEN MIC"}
         </button>
 
-        {/* Keybind assign buttons */}
-        <div style={{ display: "flex", gap: "0.3rem" }}>
-          {/* Mute keybind (only relevant in open mic mode) */}
-          {mode === "open" && (
-            <button
-              onClick={() => setAssigningKey(assigningKey === "mute" ? null : "mute")}
-              title="Assign mute key"
-              style={{
-                ...btnBase,
-                color: assigningKey === "mute" ? theme.primary : theme.textDim,
-                borderColor: assigningKey === "mute" ? theme.primary : theme.border,
-                background: assigningKey === "mute" ? theme.primaryGlow : "transparent",
-              }}
-            >
-              {assigningKey === "mute" ? "PRESS A KEY..." : `MUTE KEY: ${muteKey}`}
-            </button>
-          )}
-
-          {/* PTT keybind (only relevant in PTT mode) */}
-          {mode === "ptt" && (
-            <button
-              onClick={() => setAssigningKey(assigningKey === "ptt" ? null : "ptt")}
-              title="Assign PTT key"
-              style={{
-                ...btnBase,
-                color: assigningKey === "ptt" ? theme.primary : theme.textDim,
-                borderColor: assigningKey === "ptt" ? theme.primary : theme.border,
-                background: assigningKey === "ptt" ? theme.primaryGlow : "transparent",
-              }}
-            >
-              {assigningKey === "ptt" ? "PRESS A KEY..." : `PTT KEY: ${pttKey}`}
-            </button>
-          )}
-        </div>
+        {/* Keybind assign */}
+        {mode === "open" && (
+          <button
+            onClick={() => setAssigningKey(assigningKey === "mute" ? null : "mute")}
+            style={{
+              ...btnBase,
+              color: assigningKey === "mute" ? theme.primary : theme.textDim,
+              borderColor: assigningKey === "mute" ? theme.primary : theme.border,
+              background: assigningKey === "mute" ? theme.primaryGlow : "transparent",
+            }}
+          >
+            {assigningKey === "mute" ? "PRESS A KEY..." : `MUTE KEY: ${muteKey}`}
+          </button>
+        )}
+        {mode === "ptt" && (
+          <button
+            onClick={() => setAssigningKey(assigningKey === "ptt" ? null : "ptt")}
+            style={{
+              ...btnBase,
+              color: assigningKey === "ptt" ? theme.primary : theme.textDim,
+              borderColor: assigningKey === "ptt" ? theme.primary : theme.border,
+              background: assigningKey === "ptt" ? theme.primaryGlow : "transparent",
+            }}
+          >
+            {assigningKey === "ptt" ? "PRESS A KEY..." : `PTT KEY: ${pttKey}`}
+          </button>
+        )}
 
         {/* Disconnect */}
         <button
           onClick={handleLeave}
-          style={{
-            ...btnBase,
-            color: "#f87171",
-            borderColor: "#f87171",
-            background: "transparent",
-          }}
+          style={{ ...btnBase, color: "#f87171", borderColor: "#f87171", background: "transparent" }}
         >
           DISCONNECT
         </button>

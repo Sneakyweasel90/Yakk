@@ -35,16 +35,12 @@ export default function Chat() {
   const currentChannelRef = useRef(channel);
   useEffect(() => { currentChannelRef.current = channel; }, [channel]);
 
-  // Breaks the circular dependency between useWebSocket (needs rejoinVoice)
-  // and useVoice (needs send). Updated once useVoice is initialised below.
   const rejoinVoiceRef = useRef<() => void>(() => {});
 
-  // Load local nicknames once on mount
   useEffect(() => {
     if (user?.token) load(user.token);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ctrl+K to open search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -60,12 +56,10 @@ export default function Chat() {
     user!.token,
     (data) => {
       if (data.type?.startsWith("voice_")) {
-        // Full snapshot of who's in each voice channel — sent on connect
         if (data.type === "voice_state") {
           setVoiceOccupancy(data.channels);
           return;
         }
-        // Someone joined or left a voice channel globally
         if (data.type === "voice_presence_update") {
           setVoiceOccupancy((prev) => {
             const current = prev[data.channelId] ?? [];
@@ -95,21 +89,18 @@ export default function Chat() {
   );
 
   const {
-    groupedMessages,
-    typers,
-    hasMore,
-    loadingMore,
-    handleMessage,
-    handleScroll,
-    handleReact,
-    bottomRef,
-    messagesContainerRef,
+    groupedMessages, typers, hasMore, loadingMore,
+    handleMessage, handleScroll, handleReact, bottomRef, messagesContainerRef,
   } = useMessages({ channel, send, currentUserId: user!.id, currentChannelRef, userRef });
 
-  const { inVoice, voiceChannel, participants, joinVoice, leaveVoice, rejoinVoice, handleVoiceMessage, localStream } =
-    useVoice(send, user!.id);
+  const {
+    inVoice, voiceChannel, participants,
+    participantVolumes, selfVolume,
+    joinVoice, leaveVoice, rejoinVoice,
+    handleVoiceMessage, localStream,
+    setParticipantVolume, setSelfVolume,
+  } = useVoice(send, user!.id);
 
-  // Keep the ref in sync so the WS reconnect callback always calls the latest version
   useEffect(() => {
     rejoinVoiceRef.current = rejoinVoice;
   }, [rejoinVoice]);
@@ -125,14 +116,12 @@ export default function Chat() {
   }, []);
 
   return (
-    <div
-      style={{
-        display: "flex", flexDirection: "column",
-        height: "100vh", width: "100vw",
-        background: theme.background, color: theme.text,
-        fontFamily: "'Rajdhani', sans-serif",
-      }}
-    >
+    <div style={{
+      display: "flex", flexDirection: "column",
+      height: "100vh", width: "100vw",
+      background: theme.background, color: theme.text,
+      fontFamily: "'Rajdhani', sans-serif",
+    }}>
       <TitleBar />
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden", alignItems: "stretch" }}>
@@ -160,13 +149,11 @@ export default function Chat() {
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
           {/* Channel header */}
-          <div
-            style={{
-              display: "flex", alignItems: "center", gap: "0.5rem",
-              padding: "0.75rem 1.5rem", borderBottom: "1px solid",
-              background: theme.surface, borderColor: theme.border,
-            }}
-          >
+          <div style={{
+            display: "flex", alignItems: "center", gap: "0.5rem",
+            padding: "0.75rem 1.5rem", borderBottom: "1px solid",
+            background: theme.surface, borderColor: theme.border,
+          }}>
             <span style={{ color: theme.textDim }}>#</span>
             <span style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: "1rem", color: theme.primary }}>
               {channel}
@@ -216,8 +203,12 @@ export default function Chat() {
               inVoice={inVoice}
               voiceChannel={voiceChannel}
               participants={participants}
+              participantVolumes={participantVolumes}
+              selfVolume={selfVolume}
               leaveVoice={leaveVoice}
               localStream={localStream}
+              setParticipantVolume={setParticipantVolume}
+              setSelfVolume={setSelfVolume}
             />
           )}
           <MessageInput send={send} channel={channel} />
