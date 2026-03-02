@@ -198,7 +198,7 @@ export default function MessageItem({
         borderRadius: "3px",
       }}
       onMouseEnter={() => onHover(msg.id)}
-      onMouseLeave={() => { if (!isPickerOpen) onHover(null); }}
+      onMouseLeave={() => { if (!isPickerOpen && !editing) onHover(null); }}
     >
       {/* Avatar column */}
       <div style={{ width: "34px", flexShrink: 0, display: "flex", alignItems: "flex-start", paddingTop: "2px" }}>
@@ -252,6 +252,8 @@ export default function MessageItem({
               if (editText.trim() && editText.trim() !== msg.content) onEdit(msg.id, editText.trim());
               setEditing(false);
             }}
+            onMouseEnter={(e) => e.stopPropagation()}
+            onMouseLeave={(e) => e.stopPropagation()}
             style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}
           >
             <input
@@ -259,6 +261,9 @@ export default function MessageItem({
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Escape") { setEditing(false); setEditText(msg.content); } }}
+              onMouseEnter={(e) => e.stopPropagation()}
+              onMouseLeave={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
               style={{
                 flex: 1, background: theme.surface2 || theme.surface,
                 border: `1px solid ${theme.primaryDim}`, borderRadius: "3px",
@@ -287,7 +292,7 @@ export default function MessageItem({
             onReact={onReact}
           />
 
-          {(isHovered || isPickerOpen) && (
+          {(isHovered || isPickerOpen || editing) && (
             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
               {/* Reply button */}
               <button
