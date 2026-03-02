@@ -88,7 +88,7 @@ export default function MessageInput({ send, channel, replyTo, onCancelReply }: 
       )}
 
       {/* Input row */}
-      <div style={{ display: "flex", gap: "0.5rem", padding: "0.75rem 1.5rem" }}>
+      <form onSubmit={handleSend} style={{ display: "flex", gap: "0.5rem", padding: "0.75rem 1.5rem" }}>
         <div style={{
           flex: 1, display: "flex", alignItems: "center", gap: "0.5rem",
           background: theme.primaryGlow, border: `1px solid ${theme.border}`,
@@ -109,6 +109,7 @@ export default function MessageInput({ send, channel, replyTo, onCancelReply }: 
           />
         </div>
         <button
+          type="submit"
           style={{
             padding: "0 1.25rem", background: "transparent",
             border: `1px solid ${theme.primaryDim}`, borderRadius: "2px",
@@ -116,11 +117,10 @@ export default function MessageInput({ send, channel, replyTo, onCancelReply }: 
             fontFamily: "'Orbitron', monospace", fontWeight: 700,
             letterSpacing: "0.1em", transition: "all 0.15s",
           }}
-          onClick={handleSend}
         >
           SEND
         </button>
-      </div>
+      </form>
 
       <style>{`
         input::placeholder { color: ${theme.textDim}; opacity: 0.4; }

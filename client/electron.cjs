@@ -1,11 +1,4 @@
-const {
-  app,
-  BrowserWindow,
-  ipcMain,
-  Notification,
-  dialog,
-  shell,
-} = require("electron");
+const { app, BrowserWindow, ipcMain, Notification, dialog, shell } = require("electron");
 const path = require("path");
 const https = require("https");
 const fs = require("fs");
@@ -43,19 +36,14 @@ function getLatestRelease() {
       path: `/repos/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`,
       headers: { "User-Agent": "Yakk-App" },
     };
-    https
-      .get(options, (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(new Error("Failed to parse release data: " + e.message));
-          }
-        });
-      })
-      .on("error", reject);
+    https.get(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error("Failed to parse release data: " + e.message)); }
+      });
+    }).on("error", reject);
   });
 }
 
@@ -149,99 +137,74 @@ function createProgressWindow() {
     </html>
   `;
 
-  progressWin.loadURL(
-    "data:text/html;charset=utf-8," + encodeURIComponent(html),
-  );
+  progressWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
 
-  progressWin.on("closed", () => {
-    progressWin = null;
-  });
+  progressWin.on("closed", () => { progressWin = null; });
 }
 
 function downloadFile(url, destPath, version) {
   return new Promise((resolve, reject) => {
     const attempt = (downloadUrl) => {
       log("Attempting download from: " + downloadUrl);
-      https
-        .get(downloadUrl, { headers: { "User-Agent": "Yakk-App" } }, (res) => {
-          log("Response status: " + res.statusCode);
-          if (res.statusCode === 302 || res.statusCode === 301) {
-            return attempt(res.headers.location);
-          }
-          if (res.statusCode !== 200) {
-            return reject(
-              new Error(`HTTP ${res.statusCode} from download URL`),
-            );
-          }
+      https.get(downloadUrl, { headers: { "User-Agent": "Yakk-App" } }, (res) => {
+        log("Response status: " + res.statusCode);
+        if (res.statusCode === 302 || res.statusCode === 301) {
+          return attempt(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`HTTP ${res.statusCode} from download URL`));
+        }
 
-          const totalSize = parseInt(res.headers["content-length"] || "0", 10);
-          let downloaded = 0;
-          let lastTime = Date.now();
-          let lastBytes = 0;
+        const totalSize = parseInt(res.headers["content-length"] || "0", 10);
+        let downloaded = 0;
+        let lastTime = Date.now();
+        let lastBytes = 0;
 
-          // Show progress window now that we have a confirmed download
-          createProgressWindow();
-          if (progressWin) {
-            progressWin.webContents.once("did-finish-load", () => {
-              progressWin?.webContents.send("download-version", version);
-            });
-          }
+        // Show progress window now that we have a confirmed download
+        createProgressWindow();
+        if (progressWin) {
+          progressWin.webContents.once("did-finish-load", () => {
+            progressWin?.webContents.send("download-version", version);
+          });
+        }
 
-          const file = fs.createWriteStream(destPath);
+        const file = fs.createWriteStream(destPath);
 
-          res.on("data", (chunk) => {
-            downloaded += chunk.length;
-            file.write(chunk);
+        res.on("data", (chunk) => {
+          downloaded += chunk.length;
+          file.write(chunk);
 
-            if (progressWin && totalSize > 0) {
-              const now = Date.now();
-              const elapsed = (now - lastTime) / 1000;
-              let mbps = "";
-              if (elapsed >= 0.5) {
-                const speed = (
-                  (downloaded - lastBytes) /
-                  elapsed /
-                  1024 /
-                  1024
-                ).toFixed(1);
-                mbps = speed + " MB/s";
-                lastTime = now;
-                lastBytes = downloaded;
-              }
-              const percent = (downloaded / totalSize) * 100;
-              progressWin.webContents.send("download-progress", {
-                percent: Math.min(percent, 99), // hold at 99 until file closes
-                mbps,
-              });
+          if (progressWin && totalSize > 0) {
+            const now = Date.now();
+            const elapsed = (now - lastTime) / 1000;
+            let mbps = "";
+            if (elapsed >= 0.5) {
+              const speed = ((downloaded - lastBytes) / elapsed / 1024 / 1024).toFixed(1);
+              mbps = speed + " MB/s";
+              lastTime = now;
+              lastBytes = downloaded;
             }
-          });
-
-          res.on("end", () => {
-            file.end(() => {
-              if (progressWin) {
-                progressWin.webContents.send("download-progress", {
-                  percent: 100,
-                  mbps: "",
-                });
-              }
-              log("Download complete: " + destPath);
-              resolve();
+            const percent = (downloaded / totalSize) * 100;
+            progressWin.webContents.send("download-progress", {
+              percent: Math.min(percent, 99), // hold at 99 until file closes
+              mbps,
             });
-          });
-
-          res.on("error", (e) => {
-            log("Response error: " + e.message);
-            reject(e);
-          });
-          file.on("error", (e) => {
-            log("File write error: " + e.message);
-            reject(e);
-          });
-        })
-        .on("error", (e) => {
-          log("HTTPS error: " + e.message);
-          reject(e);
+          }
         });
+
+        res.on("end", () => {
+          file.end(() => {
+            if (progressWin) {
+              progressWin.webContents.send("download-progress", { percent: 100, mbps: "" });
+            }
+            log("Download complete: " + destPath);
+            resolve();
+          });
+        });
+
+        res.on("error", (e) => { log("Response error: " + e.message); reject(e); });
+        file.on("error", (e) => { log("File write error: " + e.message); reject(e); });
+      }).on("error", (e) => { log("HTTPS error: " + e.message); reject(e); });
     };
     attempt(url);
   });
@@ -249,10 +212,7 @@ function downloadFile(url, destPath, version) {
 
 async function checkForUpdates() {
   log("checkForUpdates started");
-  if (process.env.NODE_ENV === "development") {
-    log("Dev mode, skipping update check");
-    return true;
-  }
+  if (process.env.NODE_ENV === "development") { log("Dev mode, skipping update check"); return true; }
 
   try {
     log("Fetching latest release...");
@@ -263,7 +223,7 @@ async function checkForUpdates() {
 
     if (isNewerVersion(latestVersion, currentVersion)) {
       log("Update available!");
-      const asset = release.assets?.find((a) => a.name.endsWith(".exe"));
+      const asset = release.assets?.find(a => a.name.endsWith(".exe"));
       log("Asset found: " + JSON.stringify(asset?.name));
       const downloadUrl = asset?.browser_download_url;
       log("Download URL: " + downloadUrl);
@@ -282,20 +242,13 @@ async function checkForUpdates() {
 
       if (response === 0 && downloadUrl) {
         try {
-          const destPath = path.join(
-            os.homedir(),
-            "Downloads",
-            `YakkSetup.exe`,
-          );
+          const destPath = path.join(os.homedir(), "Downloads", `YakkSetup.exe`);
           log("Saving to: " + destPath);
           await downloadFile(downloadUrl, destPath, latestVersion);
           log("Download finished, launching installer");
 
           // Close progress window before launching installer
-          if (progressWin) {
-            progressWin.close();
-            progressWin = null;
-          }
+          if (progressWin) { progressWin.close(); progressWin = null; }
 
           log("Opening with shell.openPath: " + destPath);
           shell.openPath(destPath).then((result) => {
@@ -309,31 +262,23 @@ async function checkForUpdates() {
               }
             }, 5000);
           });
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 3000));
           log("Quitting");
           app.quit();
           return false;
         } catch (err) {
           log("Download/install error: " + err.message);
-          if (progressWin) {
-            progressWin.close();
-            progressWin = null;
-          }
-          await dialog
-            .showMessageBox({
-              type: "error",
-              title: "Download Failed",
-              message: "Could not download update.",
-              detail: `Error: ${err.message}\n\nPlease visit GitHub to download manually.`,
-              buttons: ["Open GitHub", "Close"],
-              defaultId: 0,
-            })
-            .then(({ response: r }) => {
-              if (r === 0)
-                shell.openExternal(
-                  `https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`,
-                );
-            });
+          if (progressWin) { progressWin.close(); progressWin = null; }
+          await dialog.showMessageBox({
+            type: "error",
+            title: "Download Failed",
+            message: "Could not download update.",
+            detail: `Error: ${err.message}\n\nPlease visit GitHub to download manually.`,
+            buttons: ["Open GitHub", "Close"],
+            defaultId: 0,
+          }).then(({ response: r }) => {
+            if (r === 0) shell.openExternal(`https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`);
+          });
           app.quit();
           return false;
         }
@@ -373,18 +318,27 @@ function createWindow() {
     win.loadFile(path.join(__dirname, "dist/index.html"));
   }
 
-  win.webContents.session.setPermissionRequestHandler(
-    (webContents, permission, callback) => {
-      if (permission === "media") callback(true);
-      else callback(false);
-    },
-  );
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === "media") callback(true);
+    else callback(false);
+  });
+
+  // Open all external links in the user's default browser, not inside Electron
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    // Allow loading the local app file, block everything else
+    if (!url.startsWith("file://")) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
 }
 
 ipcMain.on("minimize", () => win?.minimize());
-ipcMain.on("maximize", () =>
-  win?.isMaximized() ? win.unmaximize() : win.maximize(),
-);
+ipcMain.on("maximize", () => win?.isMaximized() ? win.unmaximize() : win.maximize());
 ipcMain.on("close", () => win?.close());
 ipcMain.on("notify", (event, { title, body }) => {
   if (win && !win.isFocused() && Notification.isSupported()) {
