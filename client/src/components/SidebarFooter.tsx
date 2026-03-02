@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTheme } from "../context/ThemeContext";
 import Avatar from "./Avatar";
 import ThemePicker from "./ThemePicker";
-import AccountSettings from "./Accountsettings";
+import AccountSettings from "./AccountSettings";
 import type { OnlineUser } from "../types";
 
 interface SidebarFooterProps {
@@ -11,6 +11,8 @@ interface SidebarFooterProps {
   avatar: string | null;
   userId: number;
   token: string;
+  role: string;
+  customRoleName: string | null;
   onlineUsers: OnlineUser[];
   onNicknameChange: (nickname: string | null) => void;
   onAvatarChange: (avatar: string | null) => void;
@@ -18,7 +20,7 @@ interface SidebarFooterProps {
 }
 
 export default function SidebarFooter({
-  username, nickname, avatar, userId, token,
+  username, nickname, avatar, userId, token, role, customRoleName,
   onlineUsers, onNicknameChange, onAvatarChange, onLogout,
 }: SidebarFooterProps) {
   const { theme } = useTheme();
@@ -124,7 +126,7 @@ export default function SidebarFooter({
       {showThemes && <ThemePicker onClose={() => setShowThemes(false)} />}
       {showSettings && (
         <AccountSettings
-          user={{ id: userId, username, nickname, avatar, token }}
+          user={{ id: userId, username, nickname, avatar, token, role: role as "admin" | "user" | "custom", customRoleName }}
           onClose={() => setShowSettings(false)}
           onNicknameChange={onNicknameChange}
           onAvatarChange={onAvatarChange}

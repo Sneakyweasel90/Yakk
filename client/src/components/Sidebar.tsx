@@ -22,13 +22,15 @@ interface Props {
   onAvatarChange: (avatar: string | null) => void;
   participants: string[];
   voiceOccupancy: Record<string, string[]>;
+  role: string;
+  customRoleName: string | null;
 }
 
 export default function Sidebar({
   channel, setChannel, voiceChannel, joinVoice, leaveVoice,
   logout, username, nickname, avatar, userId, token,
   onlineUsers, onSearchOpen, onNicknameChange, onAvatarChange,
-  participants, voiceOccupancy,
+  participants, voiceOccupancy, role, customRoleName,
 }: Props) {
   const { theme } = useTheme();
   const {
@@ -107,6 +109,8 @@ export default function Sidebar({
         avatar={avatar}
         userId={userId}
         token={token}
+        role={role}
+        customRoleName={customRoleName}
         onlineUsers={onlineUsers}
         onNicknameChange={onNicknameChange}
         onAvatarChange={onAvatarChange}

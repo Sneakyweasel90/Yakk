@@ -148,6 +148,8 @@ export default function Chat() {
             token={user!.token}
             onlineUsers={onlineUsers}
             onSearchOpen={() => setShowSearch(true)}
+            role={user!.role ?? "user"}
+            customRoleName={user!.customRoleName ?? null}
             avatar={user!.avatar ?? null}
             onNicknameChange={updateNickname}
             onAvatarChange={updateAvatar}
