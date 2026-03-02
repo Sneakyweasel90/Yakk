@@ -17,7 +17,7 @@ interface Props {
     customRoleName: string | null;
   };
   onClose: () => void;
-  onNicknameChange: (nickname: string | null) => void;
+  onNicknameChange: (nickname: string | null) => void; 
   onAvatarChange: (avatar: string | null) => void;
 }
 

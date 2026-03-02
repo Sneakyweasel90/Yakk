@@ -5,7 +5,7 @@ import ThemePicker from "./ThemePicker";
 import AccountSettings from "./AccountSettings";
 import type { OnlineUser } from "../types";
 
-interface SidebarFooterProps {
+interface SidebarFooterProps { 
   username: string;
   nickname: string | null;
   avatar: string | null;
