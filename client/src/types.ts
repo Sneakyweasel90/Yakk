@@ -1,3 +1,5 @@
+export type UserRole = "admin" | "user" | "custom";
+
 export interface User {
   id: number;
   username: string;
@@ -5,6 +7,19 @@ export interface User {
   avatar: string | null;
   token: string;
   refreshToken: string;
+  role: UserRole;
+  customRoleName: string | null;
+}
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  nickname: string | null;
+  avatar: string | null;
+  role: UserRole;
+  custom_role_name: string | null;
+  banned_at: string | null;
+  created_at: string;
 }
 
 export interface Reaction {
@@ -27,6 +42,8 @@ export interface Message {
   reply_to_username?: string | null;
   reply_to_content?: string | null;
   edited_at?: string | null;
+  user_role?: string;
+  user_custom_role_name?: string | null;
 }
 
 export interface GroupedMessage extends Message {

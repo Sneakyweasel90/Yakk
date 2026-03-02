@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { RoleBadge } from "./AccountSettings";
 import type { GroupedMessage, Reaction } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import Avatar from "./Avatar";
@@ -152,7 +153,7 @@ function ReactionPills({ reactions, messageId, currentUsername, onReact }: React
 // ── MessageItem ────────────────────────────────────────────────────────────────
 
 interface MessageItemProps {
-  msg: GroupedMessage;
+  msg: GroupedMessage & { user_role?: string; user_custom_role_name?: string | null };
   hoveredMsgId: number | null;
   pickerMsgId: number | null;
   currentUsername: string;
@@ -217,6 +218,9 @@ export default function MessageItem({
             >
               {resolveNickname(msg.user_id, msg.raw_username || msg.username)}
             </span>
+            {msg.user_role && msg.user_role !== "user" && (
+              <RoleBadge role={msg.user_role as "admin" | "user" | "custom"} customRoleName={msg.user_custom_role_name} />
+            )}
             <span style={{ fontSize: "0.65rem", fontFamily: "'Share Tech Mono', monospace", color: theme.textDim }}>
               {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>

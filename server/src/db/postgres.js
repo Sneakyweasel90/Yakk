@@ -62,16 +62,29 @@ export async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (owner_id, target_id)
     );
+
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
   `);
 
+  // Users table additions
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS public_key TEXT;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname VARCHAR(50);`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_role_name VARCHAR(50);`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;`);
+
+  // Messages table additions
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INT REFERENCES messages(id) ON DELETE SET NULL;`);
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INT REFERENCES messages(id) ON DELETE SET NULL;`);
-await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;`);
+
+  // Promote the oldest account to admin (safe to re-run)
+  await pool.query(`
+    UPDATE users SET role = 'admin'
+    WHERE id = (SELECT id FROM users ORDER BY id ASC LIMIT 1)
+    AND role = 'user'
+  `);
 
   await pool.query(`
     INSERT INTO channels (name, type) VALUES

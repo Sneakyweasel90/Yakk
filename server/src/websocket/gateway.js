@@ -144,7 +144,7 @@ export async function initWebSocket(server) {
         ws.channels.add(channelId);
 
         const { rows } = await db.query(
-          `SELECT m.*, u.username AS raw_username,
+          `SELECT m.*, u.username AS raw_username, u.role AS user_role, u.custom_role_name AS user_custom_role_name,
              rm.username AS reply_to_username, rm.content AS reply_to_content
            FROM messages m
            JOIN users u ON m.user_id = u.id
@@ -173,7 +173,7 @@ export async function initWebSocket(server) {
         const { channelId, beforeId } = msg;
         if (!channelId || !beforeId) return;
         const { rows } = await db.query(
-          `SELECT m.*, u.username AS raw_username,
+          `SELECT m.*, u.username AS raw_username, u.role AS user_role, u.custom_role_name AS user_custom_role_name,
              rm.username AS reply_to_username, rm.content AS reply_to_content
            FROM messages m
            JOIN users u ON m.user_id = u.id
@@ -209,14 +209,14 @@ export async function initWebSocket(server) {
            VALUES ($1, $2, $3, $4, $5) RETURNING *`,
           [channelId, user.id, displayName, content.trim(), replyToId || null]
         );
-        const { rows: uRaw } = await db.query(`SELECT username FROM users WHERE id = $1`, [user.id]);
+        const { rows: uRaw } = await db.query(`SELECT username, custom_role_name FROM users WHERE id = $1`, [user.id]);
         // Fetch reply preview if this is a reply
         let reply_to_username = null, reply_to_content = null;
         if (replyToId) {
           const { rows: replyRows } = await db.query(`SELECT username, content FROM messages WHERE id = $1`, [replyToId]);
           if (replyRows[0]) { reply_to_username = replyRows[0].username; reply_to_content = replyRows[0].content; }
         }
-        broadcast(channelId, { type: "message", message: { ...rows[0], raw_username: uRaw[0]?.username || user.username, reactions: [], reply_to_username, reply_to_content } });
+        broadcast(channelId, { type: "message", message: { ...rows[0], raw_username: uRaw[0]?.username || user.username, user_role: user.role || 'user', user_custom_role_name: uRaw[0]?.custom_role_name || null, reactions: [], reply_to_username, reply_to_content } });
       }
 
       // REACT
@@ -266,15 +266,17 @@ export async function initWebSocket(server) {
         broadcast(rows[0].channel_id, { type: "message_edited", messageId, content: content.trim() });
       }
 
-      // DELETE message — only allowed by the original author
+      // DELETE message — allowed by original author OR admin
       if (msg.type === "delete_message") {
         const { messageId } = msg;
         if (!messageId) return;
-        const { rows } = await db.query(
-          `DELETE FROM messages WHERE id = $1 AND user_id = $2 RETURNING channel_id`,
-          [messageId, user.id]
-        );
-        if (!rows[0]) return; // not found or not owner
+        // Admin can delete any message; regular users only their own
+        const query = user.role === "admin"
+          ? `DELETE FROM messages WHERE id = $1 RETURNING channel_id`
+          : `DELETE FROM messages WHERE id = $1 AND user_id = $2 RETURNING channel_id`;
+        const params = user.role === "admin" ? [messageId] : [messageId, user.id];
+        const { rows } = await db.query(query, params);
+        if (!rows[0]) return;
         broadcast(rows[0].channel_id, { type: "message_deleted", messageId });
       }
 

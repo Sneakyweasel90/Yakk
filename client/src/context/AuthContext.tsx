@@ -86,7 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  // Called after a successful nickname update so UI reflects immediately
   const updateAvatar = useCallback((avatar: string | null) => {
     setUser(prev => {
       if (!prev) return prev;

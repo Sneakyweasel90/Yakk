@@ -10,18 +10,16 @@ const router = express.Router();
 const ACCESS_TOKEN_TTL = "15m";
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-// Strict rate limiter for registration — 5 accounts per IP per hour
 const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+  windowMs: 60 * 60 * 1000,
   max: 5,
   message: { error: "Too many accounts created from this IP, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Strict rate limiter for login — 10 attempts per IP per 15 minutes
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: "Too many login attempts, please try again later" },
   standardHeaders: true,
@@ -30,7 +28,7 @@ const loginLimiter = rateLimit({
 
 function generateTokens(user) {
   const accessToken = jwt.sign(
-    { id: user.id, username: user.username },
+    { id: user.id, username: user.username, role: user.role || "user" },
     process.env.JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_TTL }
   );
@@ -48,7 +46,7 @@ async function storeRefreshToken(userId, token) {
 
 // REGISTER
 router.post("/register", registerLimiter, async (req, res) => {
-  const { username, password, inviteCode } = req.body; 
+  const { username, password, inviteCode } = req.body;
 
   if (!process.env.INVITE_CODE || inviteCode !== process.env.INVITE_CODE)
     return res.status(403).json({ error: "Invalid invite code" });
@@ -56,14 +54,12 @@ router.post("/register", registerLimiter, async (req, res) => {
   if (!username || !password)
     return res.status(400).json({ error: "Username and password required" });
 
-  // Username rules: 3-20 chars, alphanumeric + underscores only
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username))
     return res.status(400).json({ error: "Username must be 3-20 characters, letters, numbers and underscores only" });
 
   if (password.length < 6)
     return res.status(400).json({ error: "Password must be at least 6 characters" });
 
-  // Global cap — prevent DB spam even across IPs
   const { rows: countRows } = await db.query(
     `SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '1 hour'`
   );
@@ -73,10 +69,16 @@ router.post("/register", registerLimiter, async (req, res) => {
 
   try {
     const hashed = await bcrypt.hash(password, 10);
+
+    // Check if this is the very first user — make them admin
+    const { rows: existingUsers } = await db.query(`SELECT COUNT(*) FROM users`);
+    const isFirstUser = parseInt(existingUsers[0].count) === 0;
+    const role = isFirstUser ? "admin" : "user";
+
     const { rows } = await db.query(
-      `INSERT INTO users (username, password_hash)
-       VALUES ($1, $2) RETURNING id, username`,
-      [username, hashed]
+      `INSERT INTO users (username, password_hash, role)
+       VALUES ($1, $2, $3) RETURNING id, username, role`,
+      [username, hashed, role]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -98,6 +100,9 @@ router.post("/login", loginLimiter, async (req, res) => {
   const user = rows[0];
   if (!user) return res.status(400).json({ error: "Invalid credentials" });
 
+  // Check if banned
+  if (user.banned_at) return res.status(403).json({ error: "This account has been banned" });
+
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(400).json({ error: "Invalid credentials" });
 
@@ -109,18 +114,21 @@ router.post("/login", loginLimiter, async (req, res) => {
     refreshToken,
     username: user.username,
     nickname: user.nickname || null,
+    avatar: user.avatar || null,
     id: user.id,
+    role: user.role || "user",
+    customRoleName: user.custom_role_name || null,
   });
 });
 
-// REFRESH — exchange a valid refresh token for a new access + refresh token pair
+// REFRESH
 router.post("/refresh", async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken)
     return res.status(400).json({ error: "Refresh token required" });
 
   const { rows } = await db.query(
-    `SELECT rt.*, u.username FROM refresh_tokens rt
+    `SELECT rt.*, u.username, u.role FROM refresh_tokens rt
      JOIN users u ON rt.user_id = u.id
      WHERE rt.token = $1 AND rt.expires_at > NOW()`,
     [refreshToken]
@@ -129,19 +137,19 @@ router.post("/refresh", async (req, res) => {
   const stored = rows[0];
   if (!stored) return res.status(401).json({ error: "Invalid or expired refresh token" });
 
-  // Rotate: delete old, issue new pair
   await db.query(`DELETE FROM refresh_tokens WHERE token = $1`, [refreshToken]);
 
   const { accessToken, refreshToken: newRefreshToken } = generateTokens({
     id: stored.user_id,
     username: stored.username,
+    role: stored.role,
   });
   await storeRefreshToken(stored.user_id, newRefreshToken);
 
   res.json({ token: accessToken, refreshToken: newRefreshToken });
 });
 
-// LOGOUT — revoke refresh token
+// LOGOUT
 router.post("/logout", async (req, res) => {
   const { refreshToken } = req.body;
   if (refreshToken) {
@@ -150,7 +158,6 @@ router.post("/logout", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Cleanup expired tokens (called periodically)
 export async function cleanupExpiredTokens() {
   await db.query(`DELETE FROM refresh_tokens WHERE expires_at <= NOW()`);
 }

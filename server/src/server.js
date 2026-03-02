@@ -9,6 +9,7 @@ import authRoutes, { cleanupExpiredTokens } from "./routes/auth.routes.js";
 import usersRoutes from "./routes/users.routes.js";
 import channelsRoutes from "./routes/channels.routes.js";
 import searchRoutes from "./routes/search.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 import { initWebSocket } from "./websocket/gateway.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 
@@ -18,7 +19,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 
-// Lock CORS to your Railway domain + localhost for dev
 const allowedOrigins = [
   "https://yakk-production.up.railway.app",
   "http://localhost:5173",
@@ -27,7 +27,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (Electron app, mobile apps)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error("Not allowed by CORS"));
@@ -42,6 +41,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/channels", channelsRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 
