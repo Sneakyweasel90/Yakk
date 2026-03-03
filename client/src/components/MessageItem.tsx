@@ -166,6 +166,7 @@ interface MessageItemProps {
   onDelete: (messageId: number) => void;
   onUsernameClick: (userId: number, username: string, el: HTMLElement) => void;
   resolveNickname: (userId: number, username: string) => string;
+  avatarMap: Record<number, string | null>;
 }
 
 export default function MessageItem({
@@ -182,6 +183,7 @@ export default function MessageItem({
   onDelete,
   onUsernameClick,
   resolveNickname,
+  avatarMap,
 }: MessageItemProps) {
   const { theme } = useTheme();
   const isHovered = hoveredMsgId === msg.id;
@@ -203,7 +205,7 @@ export default function MessageItem({
     >
       {/* Avatar column */}
       <div style={{ width: "34px", flexShrink: 0, display: "flex", alignItems: "flex-start", paddingTop: "2px" }}>
-        {!msg.isGrouped && <Avatar username={msg.username} size={34} />}
+        {!msg.isGrouped && <Avatar username={msg.username} avatar={avatarMap[msg.user_id] ?? null} size={34} />}
       </div>
 
       {/* Message body */}

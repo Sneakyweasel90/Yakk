@@ -14,10 +14,13 @@ import SearchOverlay from "./SearchOverlay";
 import UserPopover from "./UserPopover";
 import MessageItem from "./MessageItem";
 import ResizableSidebar from "./ResizableSidebar";
+import axios from "axios";
+import config from "../config";
 import type { OnlineUser } from "../types";
 
 export default function Chat() {
   const { user, logout, updateNickname, updateAvatar } = useAuth();
+
   const { resolve, load, nicknames } = useLocalNicknames();
 
   // Wrap resolve to handle own nickname (local nicknames can't be set for yourself,
@@ -39,6 +42,7 @@ export default function Chat() {
   const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
   const [replyTo, setReplyTo] = useState<import("../types").GroupedMessage | null>(null);
   const [popover, setPopover] = useState<{ userId: number; username: string; el: HTMLElement } | null>(null);
+  const [avatarMap, setAvatarMap] = useState<Record<number, string | null>>({});
 
   const currentChannelRef = useRef(channel);
   useEffect(() => { currentChannelRef.current = channel; }, [channel]);
@@ -47,6 +51,16 @@ export default function Chat() {
 
   useEffect(() => {
     if (user?.token) load(user.token);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!user?.token) return;
+    axios.get(`${config.HTTP}/api/users/avatars`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(({ data }) => {
+        const map: Record<number, string | null> = {};
+        for (const u of data) map[u.id] = u.avatar;
+        setAvatarMap(map);
+      }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -152,7 +166,10 @@ export default function Chat() {
             customRoleName={user!.customRoleName ?? null}
             avatar={user!.avatar ?? null}
             onNicknameChange={updateNickname}
-            onAvatarChange={updateAvatar}
+            onAvatarChange={(avatar) => {
+              updateAvatar(avatar);
+              if (user?.id) setAvatarMap(prev => ({ ...prev, [user.id]: avatar }));
+            }}
             voiceOccupancy={voiceOccupancy}
           />
         </ResizableSidebar>
@@ -204,6 +221,7 @@ export default function Chat() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 currentUserId={user!.id}
+                avatarMap={avatarMap}
                 onUsernameClick={(userId, username, el) => setPopover({ userId, username, el })}
                 resolveNickname={resolveNickname}
               />
