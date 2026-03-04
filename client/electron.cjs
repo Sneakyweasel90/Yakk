@@ -29,6 +29,21 @@ function isNewerVersion(latest, current) {
   return false;
 }
 
+function getPlatformAsset(assets) {
+  if (process.platform === "win32") {
+    return assets?.find(a => a.name.endsWith(".exe"));
+  } else if (process.platform === "linux") {
+    return assets?.find(a => a.name.endsWith(".AppImage"));
+  }
+  return null;
+}
+
+function getDownloadFileName() {
+  if (process.platform === "win32") return "YakkSetup.exe";
+  if (process.platform === "linux") return "Yakk.AppImage";
+  return "Yakk";
+}
+
 function getLatestRelease() {
   return new Promise((resolve, reject) => {
     const options = {
@@ -82,16 +97,8 @@ function createProgressWindow() {
           border: 1px solid rgba(0,255,136,0.2);
           user-select: none;
         }
-        .title {
-          font-size: 13px;
-          letter-spacing: 0.2em;
-          opacity: 0.7;
-        }
-        .version {
-          font-size: 11px;
-          opacity: 0.5;
-          letter-spacing: 0.1em;
-        }
+        .title { font-size: 13px; letter-spacing: 0.2em; opacity: 0.7; }
+        .version { font-size: 11px; opacity: 0.5; letter-spacing: 0.1em; }
         .bar-track {
           width: 100%;
           height: 6px;
@@ -102,57 +109,42 @@ function createProgressWindow() {
         }
         .bar-fill {
           height: 100%;
-          width: 0%;
-          background: linear-gradient(90deg, #00ff88, #00cc66);
+          background: #00ff88;
           border-radius: 3px;
+          width: 0%;
           transition: width 0.3s ease;
-          box-shadow: 0 0 8px rgba(0,255,136,0.5);
         }
-        .status {
-          font-size: 11px;
-          opacity: 0.6;
-          letter-spacing: 0.08em;
-        }
+        .speed { font-size: 10px; opacity: 0.4; letter-spacing: 0.05em; min-height: 14px; }
       </style>
     </head>
     <body>
       <div class="title">DOWNLOADING UPDATE</div>
-      <div class="version" id="ver">YAKK</div>
+      <div class="version" id="ver"></div>
       <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
-      <div class="status" id="status">STARTING...</div>
+      <div class="speed" id="speed"></div>
       <script>
-        const { ipcRenderer } = require('electron');
-        ipcRenderer.on('download-progress', (_, data) => {
-          document.getElementById('bar').style.width = data.percent + '%';
-          document.getElementById('status').textContent = 
-            data.percent < 100
-              ? Math.round(data.percent) + '% — ' + (data.mbps || '') 
-              : 'INSTALLING...';
-        });
-        ipcRenderer.on('download-version', (_, version) => {
-          document.getElementById('ver').textContent = version;
+        const { ipcRenderer } = require("electron");
+        ipcRenderer.on("download-version", (_, v) => { document.getElementById("ver").textContent = v; });
+        ipcRenderer.on("download-progress", (_, { percent, mbps }) => {
+          document.getElementById("bar").style.width = percent + "%";
+          document.getElementById("speed").textContent = mbps || "";
         });
       </script>
     </body>
-    </html>
-  `;
+    </html>`;
 
   progressWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
-
-  progressWin.on("closed", () => { progressWin = null; });
 }
 
 function downloadFile(url, destPath, version) {
   return new Promise((resolve, reject) => {
-    const attempt = (downloadUrl) => {
-      log("Attempting download from: " + downloadUrl);
-      https.get(downloadUrl, { headers: { "User-Agent": "Yakk-App" } }, (res) => {
-        log("Response status: " + res.statusCode);
+    const attempt = (currentUrl) => {
+      https.get(currentUrl, { headers: { "User-Agent": "Yakk-App" } }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           return attempt(res.headers.location);
         }
         if (res.statusCode !== 200) {
-          return reject(new Error(`HTTP ${res.statusCode} from download URL`));
+          return reject(new Error(`HTTP ${res.statusCode}`));
         }
 
         const totalSize = parseInt(res.headers["content-length"] || "0", 10);
@@ -160,7 +152,6 @@ function downloadFile(url, destPath, version) {
         let lastTime = Date.now();
         let lastBytes = 0;
 
-        // Show progress window now that we have a confirmed download
         createProgressWindow();
         if (progressWin) {
           progressWin.webContents.once("did-finish-load", () => {
@@ -186,7 +177,7 @@ function downloadFile(url, destPath, version) {
             }
             const percent = (downloaded / totalSize) * 100;
             progressWin.webContents.send("download-progress", {
-              percent: Math.min(percent, 99), // hold at 99 until file closes
+              percent: Math.min(percent, 99),
               mbps,
             });
           }
@@ -210,6 +201,20 @@ function downloadFile(url, destPath, version) {
   });
 }
 
+async function installUpdate(destPath) {
+  if (process.platform === "win32") {
+    shell.openPath(destPath).then(() => {
+      setTimeout(() => {
+        try { fs.unlinkSync(destPath); } catch (e) { log("Could not delete installer: " + e.message); }
+      }, 5000);
+    });
+  } else if (process.platform === "linux") {
+    // Make AppImage executable and launch it
+    fs.chmodSync(destPath, "755");
+    shell.openPath(destPath);
+  }
+}
+
 async function checkForUpdates() {
   log("checkForUpdates started");
   if (process.env.NODE_ENV === "development") { log("Dev mode, skipping update check"); return true; }
@@ -223,7 +228,7 @@ async function checkForUpdates() {
 
     if (isNewerVersion(latestVersion, currentVersion)) {
       log("Update available!");
-      const asset = release.assets?.find(a => a.name.endsWith(".exe"));
+      const asset = getPlatformAsset(release.assets);
       log("Asset found: " + JSON.stringify(asset?.name));
       const downloadUrl = asset?.browser_download_url;
       log("Download URL: " + downloadUrl);
@@ -242,26 +247,14 @@ async function checkForUpdates() {
 
       if (response === 0 && downloadUrl) {
         try {
-          const destPath = path.join(os.homedir(), "Downloads", `YakkSetup.exe`);
+          const destPath = path.join(os.homedir(), "Downloads", getDownloadFileName());
           log("Saving to: " + destPath);
           await downloadFile(downloadUrl, destPath, latestVersion);
           log("Download finished, launching installer");
 
-          // Close progress window before launching installer
           if (progressWin) { progressWin.close(); progressWin = null; }
 
-          log("Opening with shell.openPath: " + destPath);
-          shell.openPath(destPath).then((result) => {
-            log("shell.openPath result: '" + result + "'");
-            setTimeout(() => {
-              try {
-                fs.unlinkSync(destPath);
-                log("Installer deleted: " + destPath);
-              } catch (e) {
-                log("Could not delete installer: " + e.message);
-              }
-            }, 5000);
-          });
+          await installUpdate(destPath);
           await new Promise(r => setTimeout(r, 3000));
           log("Quitting");
           app.quit();
@@ -323,13 +316,11 @@ function createWindow() {
     else callback(false);
   });
 
-  // Open all external links in the user's default browser, not inside Electron
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, url) => {
-    // Allow loading the local app file, block everything else
     if (!url.startsWith("file://")) {
       event.preventDefault();
       shell.openExternal(url);

@@ -10,15 +10,26 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build && electron-builder"
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:linux": "npm run build && electron-builder --linux"
   },
   "build": {
     "appId": "com.yakk.app",
     "productName": "Yakk",
+    "directories": {
+      "output": "dist_electron"
+    },
     "win": {
       "target": "nsis",
       "icon": "public/icon.png",
       "artifactName": "YakkSetup.exe"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "public/icon.png",
+      "category": "Network",
+      "artifactName": "Yakk.AppImage"
     },
     "files": [
       "dist/**/*",
