@@ -4,8 +4,7 @@ const https = require("https");
 const fs = require("fs");
 const os = require("os");
 
-const GITHUB_USER = "Sneakyweasel90";
-const GITHUB_REPO = "Yakk";
+const GITLAB_PROJECT_ID = "80021805";
 
 let win;
 let progressWin;
@@ -47,16 +46,25 @@ function getDownloadFileName() {
 function getLatestRelease() {
   return new Promise((resolve, reject) => {
     const options = {
-      hostname: "api.github.com",
-      path: `/repos/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`,
+      hostname: "gitlab.com",
+      path: `/api/v4/projects/${GITLAB_PROJECT_ID}/releases/permalink/latest`,
       headers: { "User-Agent": "Yakk-App" },
     };
     https.get(options, (res) => {
       let data = "";
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error("Failed to parse release data: " + e.message)); }
+        try {
+          const parsed = JSON.parse(data);
+          // Normalise GitLab's asset shape to match what the rest of the code expects
+          const assets = (parsed.assets?.links || []).map(link => ({
+            name: link.name,
+            browser_download_url: link.direct_asset_url || link.url,
+          }));
+          resolve({ tag_name: parsed.tag_name, assets });
+        } catch (e) {
+          reject(new Error("Failed to parse release data: " + e.message));
+        }
       });
     }).on("error", reject);
   });
@@ -209,7 +217,6 @@ async function installUpdate(destPath) {
       }, 5000);
     });
   } else if (process.platform === "linux") {
-    // Make AppImage executable and launch it
     fs.chmodSync(destPath, "755");
     shell.openPath(destPath);
   }
@@ -266,11 +273,11 @@ async function checkForUpdates() {
             type: "error",
             title: "Download Failed",
             message: "Could not download update.",
-            detail: `Error: ${err.message}\n\nPlease visit GitHub to download manually.`,
-            buttons: ["Open GitHub", "Close"],
+            detail: `Error: ${err.message}\n\nPlease visit GitLab to download manually.`,
+            buttons: ["Open GitLab", "Close"],
             defaultId: 0,
           }).then(({ response: r }) => {
-            if (r === 0) shell.openExternal(`https://github.com/${GITHUB_USER}/${GITHUB_REPO}/releases/latest`);
+            if (r === 0) shell.openExternal(`https://gitlab.com/Sneakyweasel90/yakk/-/releases`);
           });
           app.quit();
           return false;
