@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useChannels } from "../hooks/useChannels";
 import ChannelList from "./ChannelList";
@@ -32,6 +33,8 @@ interface Props {
   activeTab: "channels" | "dms";
   onTabChange: (tab: "channels" | "dms") => void;
   onSelectDM: (conv: DMConversation) => void;
+  // FIX 2: callback so Chat can read text channel names for Alt+↑/↓ navigation
+  onTextChannelNamesChange?: (names: string[]) => void;
 }
 
 export default function Sidebar({
@@ -41,6 +44,7 @@ export default function Sidebar({
   participants, voiceOccupancy,
   dmConversations, dmLoading, activeDMChannel, totalUnread,
   activeTab, onTabChange, onSelectDM,
+  onTextChannelNamesChange,
 }: Props) {
   const { theme } = useTheme();
   const {
@@ -50,6 +54,11 @@ export default function Sidebar({
     createChannel, deleteChannel,
     toggleCreateText, toggleCreateVoice, cancelCreate,
   } = useChannels(token);
+
+  // Keep the parent's ref up to date whenever the channel list changes
+  useEffect(() => {
+    onTextChannelNamesChange?.(textChannels.map((c) => c.name));
+  }, [textChannels, onTextChannelNamesChange]);
 
   return (
     <div style={{

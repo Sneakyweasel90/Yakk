@@ -50,6 +50,10 @@ export default function Chat() {
 
   const { conversations: dmConversations, dmLoading, openDM, markRead, onDMMessage, totalUnread } = useDMs(user!.token, user!.id);
 
+  // Ref that Sidebar keeps populated with the current ordered text channel names.
+  // Used by the Alt+↑/↓ keyboard handler below without needing to lift state.
+  const textChannelNamesRef = useRef<string[]>([]);
+
   const currentChannelRef = useRef(channel);
   useEffect(() => { currentChannelRef.current = channel; }, [channel]);
 
@@ -69,16 +73,39 @@ export default function Chat() {
       }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+K — toggle search
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
         setShowSearch((s) => !s);
+        return;
+      }
+
+      // Alt+↑/↓ — navigate text channels (channels tab only, not in input)
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (activeTab !== "channels") return;
+
+        const names = textChannelNamesRef.current;
+        if (names.length === 0) return;
+
+        e.preventDefault();
+        const cur = currentChannelRef.current;
+        const idx = names.indexOf(cur);
+        const next =
+          e.key === "ArrowDown"
+            ? names[(idx + 1) % names.length]
+            : names[(idx - 1 + names.length) % names.length];
+        setChannel(next);
       }
     };
+
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [activeTab]); // activeTab needed so the guard works correctly
 
   const { send, disconnect } = useWebSocket(
     user!.token,
@@ -215,6 +242,7 @@ export default function Chat() {
               setActiveDMConv(conv);
               handleSelectDM(conv);
             }}
+            onTextChannelNamesChange={(names) => { textChannelNamesRef.current = names; }}
           />
         </ResizableSidebar>
 
@@ -293,7 +321,14 @@ export default function Chat() {
               setSelfVolume={setSelfVolume}
             />
           )}
-          <MessageInput send={send} channel={activeTab === "dms" && activeDMConv ? activeDMConv.channelId : channel} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
+          {/* FIX 1: pass onlineUsers so @mention autocomplete has candidates */}
+          <MessageInput
+            send={send}
+            channel={activeTab === "dms" && activeDMConv ? activeDMConv.channelId : channel}
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
+            onlineUsers={onlineUsers}
+          />
         </div>
       </div>
 
