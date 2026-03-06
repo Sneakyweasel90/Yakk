@@ -98,6 +98,25 @@ export async function initDB() {
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INT REFERENCES messages(id) ON DELETE SET NULL;`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;`);
 
+  // ── Invite tokens table ──────────────────────────────────────────────────────
+  // Replaces the static INVITE_CODE env var with admin-generated single-use tokens.
+  // Each token can optionally have an expiry. Once used, used_at is set and it cannot be reused.
+  // The static env var INVITE_CODE is still checked as a fallback for bootstrapping
+  // (so existing deployments keep working until the admin generates DB tokens).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invite_tokens (
+      id SERIAL PRIMARY KEY,
+      token VARCHAR(64) UNIQUE NOT NULL,
+      created_by INT REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ,
+      used_at TIMESTAMPTZ,
+      used_by_username VARCHAR(50),
+      note VARCHAR(100)
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_invite_tokens_token ON invite_tokens(token);`);
+
   // Promote the oldest account to admin (safe to re-run)
   await pool.query(`
     UPDATE users SET role = 'admin'

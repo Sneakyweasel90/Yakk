@@ -21,7 +21,9 @@ export default function Login() {
     setLoading(true);
     try {
       const { data } = await axios.post(`${config.HTTP}/api/auth/login`, { username, password });
-      await login(data);
+      // Pass the plaintext password so the E2E key store can derive the PBKDF2 wrapping key
+      // and load (or generate) the persisted ECDH private key from IndexedDB.
+      await login(data, password);
       navigate("/");
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {

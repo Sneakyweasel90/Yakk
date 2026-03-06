@@ -7,7 +7,7 @@ import rateLimit from "express-rate-limit";
 
 const router = express.Router();
 
-const ACCESS_TOKEN_TTL = "15m";
+const ACCESS_TOKEN_TTL    = "15m";
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 const registerLimiter = rateLimit({
@@ -44,12 +44,45 @@ async function storeRefreshToken(userId, token) {
   );
 }
 
+/**
+ * Validate an invite code.
+ * Priority:
+ *   1. Check invite_tokens table — single-use DB tokens created by admins.
+ *   2. Fall back to the static INVITE_CODE env var (for bootstrapping / existing deployments).
+ *
+ * Returns { valid: true, tokenId } or { valid: false }.
+ * tokenId is null when the env-var fallback matched.
+ */
+async function validateInviteCode(code) {
+  if (!code) return { valid: false };
+
+  // Check DB tokens first
+  const { rows } = await db.query(
+    `SELECT id, expires_at, used_at FROM invite_tokens WHERE token = $1`,
+    [code]
+  );
+
+  if (rows.length > 0) {
+    const tok = rows[0];
+    if (tok.used_at) return { valid: false }; // already used
+    if (tok.expires_at && new Date(tok.expires_at) < new Date()) return { valid: false }; // expired
+    return { valid: true, tokenId: tok.id };
+  }
+
+  // Fall back to static env var (allows existing invite codes to keep working)
+  if (process.env.INVITE_CODE && code === process.env.INVITE_CODE) {
+    return { valid: true, tokenId: null };
+  }
+
+  return { valid: false };
+}
+
 // REGISTER
 router.post("/register", registerLimiter, async (req, res) => {
   const { username, password, inviteCode } = req.body;
 
-  if (!process.env.INVITE_CODE || inviteCode !== process.env.INVITE_CODE)
-    return res.status(403).json({ error: "Invalid invite code" });
+  const { valid, tokenId } = await validateInviteCode(inviteCode);
+  if (!valid) return res.status(403).json({ error: "Invalid or expired invite code" });
 
   if (!username || !password)
     return res.status(400).json({ error: "Username and password required" });
@@ -70,7 +103,7 @@ router.post("/register", registerLimiter, async (req, res) => {
   try {
     const hashed = await bcrypt.hash(password, 10);
 
-    // Check if this is the very first user — make them admin
+    // First user becomes admin automatically
     const { rows: existingUsers } = await db.query(`SELECT COUNT(*) FROM users`);
     const isFirstUser = parseInt(existingUsers[0].count) === 0;
     const role = isFirstUser ? "admin" : "user";
@@ -80,6 +113,15 @@ router.post("/register", registerLimiter, async (req, res) => {
        VALUES ($1, $2, $3) RETURNING id, username, role`,
       [username, hashed, role]
     );
+
+    // Mark the DB invite token as used (env-var fallback has no token to mark)
+    if (tokenId !== null) {
+      await db.query(
+        `UPDATE invite_tokens SET used_at = NOW(), used_by_username = $1 WHERE id = $2`,
+        [username, tokenId]
+      );
+    }
+
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === "23505")
@@ -92,15 +134,10 @@ router.post("/register", registerLimiter, async (req, res) => {
 router.post("/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body;
 
-  const { rows } = await db.query(
-    `SELECT * FROM users WHERE username=$1`,
-    [username]
-  );
-
+  const { rows } = await db.query(`SELECT * FROM users WHERE username=$1`, [username]);
   const user = rows[0];
   if (!user) return res.status(400).json({ error: "Invalid credentials" });
 
-  // Check if banned
   if (user.banned_at) return res.status(403).json({ error: "This account has been banned" });
 
   const valid = await bcrypt.compare(password, user.password_hash);
@@ -124,8 +161,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 // REFRESH
 router.post("/refresh", async (req, res) => {
   const { refreshToken } = req.body;
-  if (!refreshToken)
-    return res.status(400).json({ error: "Refresh token required" });
+  if (!refreshToken) return res.status(400).json({ error: "Refresh token required" });
 
   const { rows } = await db.query(
     `SELECT rt.*, u.username, u.role FROM refresh_tokens rt
@@ -160,6 +196,8 @@ router.post("/logout", async (req, res) => {
 
 export async function cleanupExpiredTokens() {
   await db.query(`DELETE FROM refresh_tokens WHERE expires_at <= NOW()`);
+  // Also clean up expired invite tokens older than 30 days to avoid table bloat
+  await db.query(`DELETE FROM invite_tokens WHERE expires_at IS NOT NULL AND expires_at < NOW() - INTERVAL '30 days'`);
 }
 
 export default router;

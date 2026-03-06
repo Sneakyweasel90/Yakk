@@ -6,7 +6,7 @@ import type { User } from "../types";
 
 interface AuthContextValue {
   user: User | null;
-  login: (userData: User) => Promise<void>;
+  login: (userData: User, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateNickname: (nickname: string | null) => void;
   updateAvatar: (avatar: string | null) => void;
@@ -14,7 +14,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const REFRESH_BUFFER_MS = 2 * 60 * 1000;
+const REFRESH_BUFFER_MS  = 2 * 60 * 1000;
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -36,11 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data } = await axios.post(`${config.HTTP}/api/auth/refresh`, {
         refreshToken: currentUser.refreshToken,
       });
-      const updated: User = {
-        ...currentUser,
-        token: data.token,
-        refreshToken: data.refreshToken,
-      };
+      const updated: User = { ...currentUser, token: data.token, refreshToken: data.refreshToken };
       localStorage.setItem("yakk_user", JSON.stringify(updated));
       setUser(updated);
       scheduleRefresh(updated);
@@ -51,13 +47,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (user) scheduleRefresh(user);
-    return () => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    };
+    return () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const login = useCallback(async (userData: User) => {
-    const publicKeyB64 = await e2eKeyStore.init();
+  const login = useCallback(async (userData: User, password: string) => {
+    // Load or generate the ECDH key pair, persisted in IndexedDB encrypted with the password.
+    // Passing the password lets PBKDF2 wrap/unwrap the private key so it survives page refreshes.
+    const publicKeyB64 = await e2eKeyStore.init(userData.username, password);
     try {
       await axios.post(
         `${config.HTTP}/api/users/public-key`,
@@ -86,19 +82,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const updateAvatar = useCallback((avatar: string | null) => {
-    setUser(prev => {
+  const updateNickname = useCallback((nickname: string | null) => {
+    setUser((prev) => {
       if (!prev) return prev;
-      const updated = { ...prev, avatar };
+      const updated = { ...prev, nickname };
       localStorage.setItem("yakk_user", JSON.stringify(updated));
       return updated;
     });
   }, []);
 
-  const updateNickname = useCallback((nickname: string | null) => {
-    setUser(prev => {
+  const updateAvatar = useCallback((avatar: string | null) => {
+    setUser((prev) => {
       if (!prev) return prev;
-      const updated = { ...prev, nickname };
+      const updated = { ...prev, avatar };
       localStorage.setItem("yakk_user", JSON.stringify(updated));
       return updated;
     });
@@ -111,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuth(): AuthContextValue {
+export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;

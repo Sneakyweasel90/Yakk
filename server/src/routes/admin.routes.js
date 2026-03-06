@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import db from "../db/postgres.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -12,28 +13,22 @@ function requireAdmin(req, res, next) {
 
 // Helper: get the owner (lowest ID user) and target user info
 async function getTargetAndOwner(targetId) {
-  const { rows: ownerRows } = await db.query(
-    `SELECT id FROM users ORDER BY id ASC LIMIT 1`
-  );
+  const { rows: ownerRows } = await db.query(`SELECT id FROM users ORDER BY id ASC LIMIT 1`);
   const { rows: targetRows } = await db.query(
     `SELECT id, username, role FROM users WHERE id = $1`, [targetId]
   );
-  return {
-    ownerId: ownerRows[0]?.id ?? null,
-    target: targetRows[0] ?? null,
-  };
+  return { ownerId: ownerRows[0]?.id ?? null, target: targetRows[0] ?? null };
 }
 
-// GET /api/admin/users — list all users with role info
-// Also returns the owner id so the UI can lock them down
+// ── User management ───────────────────────────────────────────────────────────
+
+// GET /api/admin/users
 router.get("/users", requireAuth, requireAdmin, async (req, res) => {
   const { rows } = await db.query(
     `SELECT id, username, nickname, avatar, role, custom_role_name, banned_at, created_at
      FROM users ORDER BY created_at ASC`
   );
-  const { rows: ownerRows } = await db.query(
-    `SELECT id FROM users ORDER BY id ASC LIMIT 1`
-  );
+  const { rows: ownerRows } = await db.query(`SELECT id FROM users ORDER BY id ASC LIMIT 1`);
   res.json({ users: rows, ownerId: ownerRows[0]?.id ?? null });
 });
 
@@ -45,11 +40,7 @@ router.patch("/users/:id/role", requireAuth, requireAdmin, async (req, res) => {
 
   const { ownerId, target } = await getTargetAndOwner(targetId);
   if (!target) return res.status(404).json({ error: "User not found" });
-
-  // Nobody can change the owner's role
   if (targetId === ownerId) return res.status(403).json({ error: "Cannot change the server owner's role" });
-
-  // Only the owner can promote/demote other admins
   if (target.role === "admin" && req.user.id !== ownerId)
     return res.status(403).json({ error: "Only the server owner can change another admin's role" });
 
@@ -66,11 +57,10 @@ router.patch("/users/:id/role", requireAuth, requireAdmin, async (req, res) => {
      RETURNING id, username, role, custom_role_name`,
     [role, cleanCustomName, targetId]
   );
-
   res.json(rows[0]);
 });
 
-// POST /api/admin/users/:id/kick — invalidate all sessions (force logout)
+// POST /api/admin/users/:id/kick
 router.post("/users/:id/kick", requireAuth, requireAdmin, async (req, res) => {
   const targetId = parseInt(req.params.id);
   if (isNaN(targetId)) return res.status(400).json({ error: "Invalid user id" });
@@ -78,11 +68,7 @@ router.post("/users/:id/kick", requireAuth, requireAdmin, async (req, res) => {
 
   const { ownerId, target } = await getTargetAndOwner(targetId);
   if (!target) return res.status(404).json({ error: "User not found" });
-
-  // Nobody can kick the owner
   if (targetId === ownerId) return res.status(403).json({ error: "Cannot kick the server owner" });
-
-  // Admins cannot kick other admins (only owner could, but owner can't be kicked either)
   if (target.role === "admin") return res.status(403).json({ error: "Cannot kick another admin" });
 
   await db.query(`DELETE FROM refresh_tokens WHERE user_id = $1`, [targetId]);
@@ -97,11 +83,7 @@ router.post("/users/:id/ban", requireAuth, requireAdmin, async (req, res) => {
 
   const { ownerId, target } = await getTargetAndOwner(targetId);
   if (!target) return res.status(404).json({ error: "User not found" });
-
-  // Nobody can ban the owner
   if (targetId === ownerId) return res.status(403).json({ error: "Cannot ban the server owner" });
-
-  // Admins cannot ban other admins
   if (target.role === "admin") return res.status(403).json({ error: "Cannot ban another admin" });
 
   await db.query(`UPDATE users SET banned_at = NOW() WHERE id = $1`, [targetId]);
@@ -113,8 +95,45 @@ router.post("/users/:id/ban", requireAuth, requireAdmin, async (req, res) => {
 router.post("/users/:id/unban", requireAuth, requireAdmin, async (req, res) => {
   const targetId = parseInt(req.params.id);
   if (isNaN(targetId)) return res.status(400).json({ error: "Invalid user id" });
-
   await db.query(`UPDATE users SET banned_at = NULL WHERE id = $1`, [targetId]);
+  res.json({ ok: true });
+});
+
+// ── Invite tokens ─────────────────────────────────────────────────────────────
+
+// GET /api/admin/invites — list all invite tokens (admin only)
+router.get("/invites", requireAuth, requireAdmin, async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT id, token, note, created_at, expires_at, used_at, used_by_username
+     FROM invite_tokens ORDER BY created_at DESC`
+  );
+  res.json(rows);
+});
+
+// POST /api/admin/invites — generate a new invite token
+// Body: { note?: string, expiresInHours?: number }  (omit expiresInHours for no expiry)
+router.post("/invites", requireAuth, requireAdmin, async (req, res) => {
+  const { note, expiresInHours } = req.body;
+  const token = crypto.randomBytes(24).toString("hex"); // 48-char hex token
+  const expiresAt = expiresInHours
+    ? new Date(Date.now() + expiresInHours * 60 * 60 * 1000)
+    : null;
+  const cleanNote = (note || "").trim().slice(0, 100) || null;
+
+  const { rows } = await db.query(
+    `INSERT INTO invite_tokens (token, created_by, expires_at, note)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, token, note, created_at, expires_at, used_at, used_by_username`,
+    [token, req.user.id, expiresAt, cleanNote]
+  );
+  res.status(201).json(rows[0]);
+});
+
+// DELETE /api/admin/invites/:id — revoke/delete an invite token
+router.delete("/invites/:id", requireAuth, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+  await db.query(`DELETE FROM invite_tokens WHERE id = $1`, [id]);
   res.json({ ok: true });
 });
 

@@ -21,16 +21,187 @@ interface Props {
   onAvatarChange: (avatar: string | null) => void;
 }
 
-// ── Role badge (imported from RoleBadge.tsx) ─────────────────────────────────
+// ── Invite Codes Panel ────────────────────────────────────────────────────────
+
+interface InviteToken {
+  id: number;
+  token: string;
+  note: string | null;
+  created_at: string;
+  expires_at: string | null;
+  used_at: string | null;
+  used_by_username: string | null;
+}
+
+function InvitePanel({ token }: { token: string }) {
+  const { theme } = useTheme();
+  const [invites, setInvites]       = useState<InviteToken[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [note, setNote]             = useState("");
+  const [expiresIn, setExpiresIn]   = useState("24");
+  const [creating, setCreating]     = useState(false);
+  const [copied, setCopied]         = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${config.HTTP}/api/admin/invites`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setInvites(data);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const create = async () => {
+    setCreating(true);
+    try {
+      const body: Record<string, unknown> = { note: note.trim() || undefined };
+      if (expiresIn !== "never") body.expiresInHours = parseInt(expiresIn);
+      const { data } = await axios.post(`${config.HTTP}/api/admin/invites`, body, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setInvites(prev => [data, ...prev]);
+      setNote("");
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) alert(err.response?.data?.error || "Failed");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revoke = async (id: number) => {
+    if (!confirm("Revoke this invite code?")) return;
+    try {
+      await axios.delete(`${config.HTTP}/api/admin/invites/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setInvites(prev => prev.filter(i => i.id !== id));
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) alert(err.response?.data?.error || "Failed");
+    }
+  };
+
+  const copy = async (invite: InviteToken) => {
+    await navigator.clipboard.writeText(invite.token);
+    setCopied(invite.id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const formatExpiry = (invite: InviteToken) => {
+    if (invite.used_at) return `used by ${invite.used_by_username}`;
+    if (!invite.expires_at) return "no expiry";
+    const d = new Date(invite.expires_at);
+    if (d < new Date()) return "expired";
+    return `expires ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  };
+
+  const isUsedOrExpired = (invite: InviteToken) =>
+    !!invite.used_at || (!!invite.expires_at && new Date(invite.expires_at) < new Date());
+
+  if (loading) return <div style={{ color: theme.textDim, fontSize: "0.75rem", textAlign: "center", padding: "1rem" }}>LOADING...</div>;
+
+  return (
+    <div>
+      {/* Generate form */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1rem", padding: "0.75rem", border: `1px solid ${theme.border}`, borderRadius: "2px", background: theme.background }}>
+        <div style={{ fontSize: "0.6rem", color: theme.textDim, letterSpacing: "0.1em", fontFamily: "'Share Tech Mono', monospace" }}>GENERATE INVITE</div>
+        <input
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="note (optional — who is this for?)"
+          style={{ ...inputStyle, background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text }}
+        />
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <span style={{ fontSize: "0.6rem", color: theme.textDim, fontFamily: "'Share Tech Mono', monospace", whiteSpace: "nowrap" }}>EXPIRES IN</span>
+          <select
+            value={expiresIn}
+            onChange={e => setExpiresIn(e.target.value)}
+            style={{ background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontSize: "0.7rem", fontFamily: "'Share Tech Mono', monospace", padding: "3px 6px", borderRadius: "2px", cursor: "pointer" }}
+          >
+            <option value="1">1 hour</option>
+            <option value="6">6 hours</option>
+            <option value="24">24 hours</option>
+            <option value="72">3 days</option>
+            <option value="168">7 days</option>
+            <option value="never">never</option>
+          </select>
+          <button
+            onClick={create}
+            disabled={creating}
+            style={{ ...btnStyle, color: theme.primary, borderColor: theme.primaryDim, marginLeft: "auto" }}
+          >
+            {creating ? "..." : "+ CREATE"}
+          </button>
+        </div>
+      </div>
+
+      {/* Token list */}
+      {invites.length === 0 ? (
+        <div style={{ color: theme.textDim, fontSize: "0.7rem", textAlign: "center", padding: "0.5rem", fontFamily: "'Share Tech Mono', monospace" }}>
+          No invite codes yet
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {invites.map(inv => {
+            const dead = isUsedOrExpired(inv);
+            return (
+              <div key={inv.id} style={{
+                border: `1px solid ${dead ? theme.border : theme.primaryDim}`,
+                borderRadius: "2px",
+                padding: "8px 10px",
+                background: dead ? theme.background : `${theme.primaryGlow}`,
+                opacity: dead ? 0.5 : 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <code style={{ flex: 1, fontSize: "0.65rem", fontFamily: "'Share Tech Mono', monospace", color: dead ? theme.textDim : theme.primary, wordBreak: "break-all" }}>
+                    {inv.token}
+                  </code>
+                  {!dead && (
+                    <button onClick={() => copy(inv)} style={{ ...btnStyle, color: theme.primary, borderColor: theme.primaryDim, flexShrink: 0 }}>
+                      {copied === inv.id ? "✓" : "COPY"}
+                    </button>
+                  )}
+                  <button onClick={() => revoke(inv.id)} style={{ ...btnStyle, color: theme.textDim, borderColor: theme.border, flexShrink: 0 }}>
+                    ✕
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: "1rem", fontSize: "0.6rem", fontFamily: "'Share Tech Mono', monospace", color: theme.textDim }}>
+                  {inv.note && <span>{inv.note}</span>}
+                  <span style={{ marginLeft: inv.note ? 0 : "auto", opacity: 0.7 }}>{formatExpiry(inv)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  padding: "0.4rem 0.6rem",
+  borderRadius: "2px",
+  fontSize: "0.75rem",
+  fontFamily: "'Share Tech Mono', monospace",
+  outline: "none",
+  width: "100%",
+};
 
 // ── Admin panel ───────────────────────────────────────────────────────────────
 
 function AdminPanel({ token, currentUserId }: { token: string; currentUserId: number }) {
   const { theme } = useTheme();
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [ownerId, setOwnerId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [adminTab, setAdminTab] = useState<"users" | "invites">("users");
+  const [users, setUsers]       = useState<AdminUser[]>([]);
+  const [ownerId, setOwnerId]   = useState<number | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
   const [customNames, setCustomNames] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
@@ -107,131 +278,117 @@ function AdminPanel({ token, currentUserId }: { token: string; currentUserId: nu
     }
   };
 
-  if (loading) return <div style={{ color: theme.textDim, fontSize: "0.75rem", padding: "1rem", textAlign: "center" }}>LOADING USERS...</div>;
-  if (error) return <div style={{ color: theme.error, fontSize: "0.75rem", padding: "1rem" }}>{error}</div>;
-
   const roleColor = (role: UserRole) =>
     role === "admin" ? theme.error : role === "custom" ? theme.primary : theme.textDim;
 
   return (
     <div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-        {users.map(u => {
-          const isSelf = u.id === currentUserId;
-          const isOwner = u.id === ownerId;
-          const isAdmin = u.role === "admin";
-          const isProtected = isOwner || (isAdmin && currentUserId !== ownerId);
-          const isBanned = !!u.banned_at;
-          return (
-            <div
-              key={u.id}
-              style={{
-                border: `1px solid ${isBanned ? theme.error : theme.border}`,
-                borderRadius: "3px",
-                padding: "8px 10px",
-                background: isBanned ? `${theme.error}11` : theme.background,
-                opacity: isBanned ? 0.7 : 1,
-              }}
-            >
-              {/* User header row */}
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <Avatar username={u.nickname || u.username} avatar={u.avatar} size={24} />
-                <span style={{ color: theme.primary, fontWeight: 700, fontSize: "0.85rem", fontFamily: "'Rajdhani', sans-serif" }}>
-                  {u.nickname || u.username}
-                </span>
-                {u.nickname && <span style={{ color: theme.textDim, fontSize: "0.65rem" }}>@{u.username}</span>}
-                <span style={{ color: roleColor(u.role), fontSize: "0.65rem", marginLeft: "auto", fontFamily: "'Share Tech Mono', monospace" }}>
-                  {u.role === "custom" ? (u.custom_role_name || "CUSTOM") : u.role.toUpperCase()}
-                </span>
-                {isOwner && <span style={{ color: theme.error, fontSize: "0.6rem", fontFamily: "'Share Tech Mono', monospace", border: `1px solid ${theme.error}`, borderRadius: "2px", padding: "1px 4px" }}>OWNER</span>}
-                {isBanned && <span style={{ color: theme.error, fontSize: "0.6rem", fontFamily: "'Share Tech Mono', monospace" }}>BANNED</span>}
-                {isSelf && <span style={{ color: theme.textDim, fontSize: "0.6rem", fontFamily: "'Share Tech Mono', monospace" }}>(you)</span>}
-              </div>
+      {/* Sub-tab bar */}
+      <div style={{ display: "flex", gap: "0", marginBottom: "1rem", borderBottom: `1px solid ${theme.border}` }}>
+        {(["users", "invites"] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setAdminTab(t)}
+            style={{
+              background: "none", border: "none",
+              borderBottom: `2px solid ${adminTab === t ? theme.primary : "transparent"}`,
+              color: adminTab === t ? theme.primary : theme.textDim,
+              fontSize: "0.6rem", fontFamily: "'Share Tech Mono', monospace",
+              letterSpacing: "0.1em", padding: "0.4rem 0.75rem",
+              cursor: "pointer", transition: "all 0.15s",
+            }}
+          >
+            {t === "users" ? "USERS" : "INVITE CODES"}
+          </button>
+        ))}
+      </div>
 
-              {/* Protected notice */}
-              {!isSelf && isProtected && (
-                <div style={{ fontSize: "0.6rem", color: theme.textDim, fontFamily: "'Share Tech Mono', monospace", opacity: 0.6 }}>
-                  {isOwner ? "server owner — cannot be modified" : "admin — only owner can modify"}
-                </div>
-              )}
+      {/* Users sub-tab */}
+      {adminTab === "users" && (
+        <>
+          {loading && <div style={{ color: theme.textDim, fontSize: "0.75rem", padding: "1rem", textAlign: "center" }}>LOADING USERS...</div>}
+          {error && <div style={{ color: theme.error, fontSize: "0.75rem", padding: "1rem" }}>{error}</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {users.map(u => {
+              const isSelf     = u.id === currentUserId;
+              const isOwner    = u.id === ownerId;
+              const isAdmin    = u.role === "admin";
+              const isProtected = isOwner || (isAdmin && currentUserId !== ownerId);
+              const isBanned   = !!u.banned_at;
+              return (
+                <div key={u.id} style={{
+                  border: `1px solid ${isBanned ? theme.error : theme.border}`,
+                  borderRadius: "3px", padding: "8px 10px",
+                  background: isBanned ? `${theme.error}11` : theme.background,
+                  opacity: isBanned ? 0.7 : 1,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: isProtected || isSelf ? 0 : "6px" }}>
+                    <Avatar username={u.nickname || u.username} avatar={u.avatar} size={24} />
+                    <span style={{ fontSize: "0.8rem", fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, color: theme.text, flex: 1 }}>
+                      {u.nickname || u.username}
+                      {u.nickname && <span style={{ fontSize: "0.65rem", color: theme.textDim, fontWeight: 400 }}> @{u.username}</span>}
+                      {isSelf && <span style={{ fontSize: "0.6rem", color: theme.textDim, fontWeight: 400 }}> (you)</span>}
+                    </span>
+                    <span style={{ fontSize: "0.6rem", fontFamily: "'Share Tech Mono', monospace", color: roleColor(u.role as UserRole) }}>
+                      {u.role === "custom" ? u.custom_role_name : u.role}
+                    </span>
+                  </div>
 
-              {/* Role controls — not for self or protected users */}
-              {!isSelf && !isProtected && (
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-                  {/* Role selector */}
-                  <select
-                    value={u.role}
-                    onChange={e => setRole(u.id, e.target.value as UserRole)}
-                    style={{
-                      background: theme.surface,
-                      border: `1px solid ${theme.border}`,
-                      color: theme.text,
-                      fontSize: "0.65rem",
-                      fontFamily: "'Share Tech Mono', monospace",
-                      padding: "2px 4px",
-                      borderRadius: "2px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <option value="user">user</option>
-                    <option value="admin">admin</option>
-                    <option value="custom">custom</option>
-                  </select>
-
-                  {/* Custom role name input */}
-                  {u.role === "custom" && (
-                    <>
-                      <input
-                        value={customNames[u.id] ?? u.custom_role_name ?? ""}
-                        onChange={e => setCustomNames(prev => ({ ...prev, [u.id]: e.target.value }))}
-                        placeholder="role name..."
-                        maxLength={50}
-                        style={{
-                          background: theme.surface,
-                          border: `1px solid ${theme.primaryDim}`,
-                          color: theme.text,
-                          fontSize: "0.65rem",
-                          fontFamily: "'Share Tech Mono', monospace",
-                          padding: "2px 6px",
-                          borderRadius: "2px",
-                          width: "100px",
-                        }}
-                      />
-                      <button
-                        onClick={() => saveCustomName(u.id)}
-                        style={{ ...btnStyle, color: theme.primary, borderColor: theme.primaryDim }}
-                      >
-                        SAVE
-                      </button>
-                    </>
+                  {isProtected && !isSelf && (
+                    <div style={{ fontSize: "0.6rem", color: theme.textDim, fontFamily: "'Share Tech Mono', monospace", marginTop: "4px", opacity: 0.6 }}>
+                      {isOwner ? "server owner — cannot be modified" : "admin — only owner can modify"}
+                    </div>
                   )}
 
-                  <div style={{ marginLeft: "auto", display: "flex", gap: "4px" }}>
-                    {/* Kick */}
-                    <button
-                      onClick={() => kick(u.id, u.username)}
-                      style={{ ...btnStyle, color: theme.textDim, borderColor: theme.border }}
-                      onMouseEnter={e => { e.currentTarget.style.color = theme.primary; e.currentTarget.style.borderColor = theme.primaryDim; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = theme.textDim; e.currentTarget.style.borderColor = theme.border; }}
-                      title="Force logout"
-                    >
-                      KICK
-                    </button>
-                    {/* Ban / Unban */}
-                    <button
-                      onClick={() => ban(u.id, u.username, isBanned)}
-                      style={{ ...btnStyle, color: isBanned ? "#4ade80" : theme.error, borderColor: isBanned ? "#4ade80" : theme.error }}
-                      title={isBanned ? "Unban user" : "Ban user"}
-                    >
-                      {isBanned ? "UNBAN" : "BAN"}
-                    </button>
-                  </div>
+                  {!isSelf && !isProtected && (
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                      <select
+                        value={u.role}
+                        onChange={e => setRole(u.id, e.target.value as UserRole)}
+                        style={{ background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontSize: "0.65rem", fontFamily: "'Share Tech Mono', monospace", padding: "2px 4px", borderRadius: "2px", cursor: "pointer" }}
+                      >
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                        <option value="custom">custom</option>
+                      </select>
+
+                      {u.role === "custom" && (
+                        <>
+                          <input
+                            value={customNames[u.id] ?? u.custom_role_name ?? ""}
+                            onChange={e => setCustomNames(prev => ({ ...prev, [u.id]: e.target.value }))}
+                            onKeyDown={e => e.key === "Enter" && saveCustomName(u.id)}
+                            placeholder="role name"
+                            style={{ background: theme.surface, border: `1px solid ${theme.border}`, color: theme.text, fontSize: "0.65rem", fontFamily: "'Share Tech Mono', monospace", padding: "2px 6px", borderRadius: "2px", width: "90px", outline: "none" }}
+                          />
+                          <button onClick={() => saveCustomName(u.id)} style={{ ...btnStyle, color: theme.primary, borderColor: theme.primaryDim }}>
+                            SAVE
+                          </button>
+                        </>
+                      )}
+
+                      <div style={{ marginLeft: "auto", display: "flex", gap: "4px" }}>
+                        <button onClick={() => kick(u.id, u.username)} style={{ ...btnStyle, color: theme.textDim, borderColor: theme.border }}>
+                          KICK
+                        </button>
+                        <button
+                          onClick={() => ban(u.id, u.username, isBanned)}
+                          style={{ ...btnStyle, color: isBanned ? "#4ade80" : theme.error, borderColor: isBanned ? "#4ade80" : theme.error }}
+                        >
+                          {isBanned ? "UNBAN" : "BAN"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Invites sub-tab */}
+      {adminTab === "invites" && <InvitePanel token={token} />}
     </div>
   );
 }
@@ -256,18 +413,18 @@ export default function AccountSettings({ user, onClose, onNicknameChange, onAva
 
   const [tab, setTab] = useState<"profile" | "admin">("profile");
 
-  const [nickname, setNickname] = useState(user.nickname || "");
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar);
+  const [nickname, setNickname]             = useState(user.nickname || "");
+  const [avatarPreview, setAvatarPreview]   = useState<string | null>(user.avatar);
   const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [newPassword, setNewPassword]       = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const [nickSaving, setNickSaving] = useState(false);
-  const [nickMsg, setNickMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [nickSaving, setNickSaving]   = useState(false);
+  const [nickMsg, setNickMsg]         = useState<{ text: string; ok: boolean } | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
-  const [avatarMsg, setAvatarMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  const [pwSaving, setPwSaving] = useState(false);
-  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [avatarMsg, setAvatarMsg]     = useState<{ text: string; ok: boolean } | null>(null);
+  const [pwSaving, setPwSaving]       = useState(false);
+  const [pwMsg, setPwMsg]             = useState<{ text: string; ok: boolean } | null>(null);
 
   const displayName = user.nickname || user.username;
 
@@ -361,17 +518,12 @@ export default function AccountSettings({ user, onClose, onNicknameChange, onAva
                 key={t}
                 onClick={() => setTab(t)}
                 style={{
-                  flex: 1,
-                  background: "none",
-                  border: "none",
+                  flex: 1, background: "none", border: "none",
                   borderBottom: `2px solid ${tab === t ? theme.primary : "transparent"}`,
                   color: tab === t ? theme.primary : theme.textDim,
-                  fontSize: "0.65rem",
-                  fontFamily: "'Share Tech Mono', monospace",
-                  letterSpacing: "0.12em",
-                  padding: "0.6rem",
-                  cursor: "pointer",
-                  transition: "all 0.15s",
+                  fontSize: "0.65rem", fontFamily: "'Share Tech Mono', monospace",
+                  letterSpacing: "0.12em", padding: "0.6rem",
+                  cursor: "pointer", transition: "all 0.15s",
                 }}
               >
                 {t === "profile" ? "◈ PROFILE" : "⚙ USER MANAGEMENT"}
@@ -446,7 +598,7 @@ export default function AccountSettings({ user, onClose, onNicknameChange, onAva
                 onChange={e => setConfirmPassword(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && savePassword()} />
               <button onClick={savePassword} disabled={pwSaving || !currentPassword || !newPassword || !confirmPassword}
-                style={{ ...styles.btn, color: theme.primary, border: `1px solid ${theme.primaryDim}`, opacity: (pwSaving || !currentPassword || !newPassword || !confirmPassword) ? 0.4 : 1 }}>
+                style={{ ...styles.btn, color: theme.primary, border: `1px solid ${theme.primaryDim}`, opacity: (pwSaving || !currentPassword || !newPassword || !confirmPassword) ? 0.5 : 1 }}>
                 {pwSaving ? "UPDATING..." : "UPDATE PASSWORD"}
               </button>
               {pwMsg && <p style={{ ...styles.msg, color: pwMsg.ok ? "#4ade80" : theme.error }}>{pwMsg.text}</p>}
@@ -456,8 +608,7 @@ export default function AccountSettings({ user, onClose, onNicknameChange, onAva
 
         {/* Admin tab */}
         {tab === "admin" && isAdmin && (
-          <div style={{ ...styles.section }}>
-            <label style={{ ...styles.label, color: theme.textDim, marginBottom: "0.75rem" }}>USER MANAGEMENT</label>
+          <div style={styles.section}>
             <AdminPanel token={user.token} currentUserId={user.id} />
           </div>
         )}
