@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
   maximize: () => ipcRenderer.send("maximize"),
   close: () => ipcRenderer.send("close"),
   notify: (title, body) => ipcRenderer.send("notify", { title, body }),
+  readFile: (filename) => ipcRenderer.invoke("read-file", filename),
 });

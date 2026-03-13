@@ -7,7 +7,8 @@ import Register from "./pages/Register";
 import Chat from "./components/Chat";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
+  if (!ready) return null;
   return user ? <>{children}</> : <Navigate to="/login" />;
 }
 

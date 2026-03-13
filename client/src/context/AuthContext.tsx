@@ -6,6 +6,7 @@ import type { User } from "../types";
 
 interface AuthContextValue {
   user: User | null;
+  ready: boolean;
   login: (userData: User, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateNickname: (nickname: string | null) => void;
@@ -18,6 +19,7 @@ const REFRESH_BUFFER_MS  = 2 * 60 * 1000;
 const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
   const [user, setUser] = useState<User | null>(() => {
     const stored = localStorage.getItem("yakk_user");
     return stored ? JSON.parse(stored) : null;
@@ -46,7 +48,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [scheduleRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-      if (!user) return;
+      if (!user) {
+        setReady(true);
+        return;
+      }
 
       // If the token was issued more than 13 minutes ago it may already be expired.
       const doInitialRefresh = async () => {
@@ -60,6 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           scheduleRefresh(updated);
         } catch {
           await logout();
+        } finally {
+          setReady(true);
         }
       };
 
@@ -119,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateNickname, updateAvatar }}>
+    <AuthContext.Provider value={{ user, ready, login, logout, updateNickname, updateAvatar }}>
       {children}
     </AuthContext.Provider>
   );

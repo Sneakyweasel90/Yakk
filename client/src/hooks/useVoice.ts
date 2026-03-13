@@ -34,55 +34,51 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   noiseSuppression: true,
 };
 
-async function applyNoiseSuppression(rawStream: MediaStream): Promise<MediaStream> {
-  try {
-    const { RnnoiseWorkletNode, loadRnnoise } = await import("@sapphi-red/web-noise-suppressor");
+function applyNoiseGate(
+  audioCtx: AudioContext,
+  source: MediaStreamAudioSourceNode,
+  destination: MediaStreamAudioDestinationNode,
+  gainNode: GainNode,
+) {
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 512;
+  analyser.smoothingTimeConstant = 0.1;
 
-    const audioCtx = new AudioContext({ sampleRate: 48000 });
-
-    await audioCtx.audioWorklet.addModule(workletUrl);
-
-    const rnnoiseWasm = await loadRnnoise({
-      wasmPath: rnnoiseWasmUrl,
-      wasmSimdPath: rnnoiseSimdUrl,
-    });
-
-    const source = audioCtx.createMediaStreamSource(rawStream);
-    const destination = audioCtx.createMediaStreamDestination();
-
-    const rnnoiseNode = new RnnoiseWorkletNode(audioCtx, {
-      wasmBinary: rnnoiseWasm,
-      maxChannels: 1,
-    });
-
-    source.connect(rnnoiseNode);
-    rnnoiseNode.connect(destination);
-
-    console.log("Noise suppression active (RNNoise)");
-    return destination.stream;
-
-  } catch (err) {
-    console.warn("Noise suppressor failed to load, using raw stream:", err);
-    return rawStream;
-  }
-}
-
-function applyGain(rawStream: MediaStream): {
-  processedStream: MediaStream;
-  gainNode: GainNode;
-  audioCtx: AudioContext;
-} {
-  const audioCtx = new AudioContext();
-  const source = audioCtx.createMediaStreamSource(rawStream);
-  const gainNode = audioCtx.createGain();
-  const destination = audioCtx.createMediaStreamDestination();
-  gainNode.gain.value = 1.0;
+  source.connect(analyser);
   source.connect(gainNode);
-  gainNode.connect(destination);
-  const processedStream = new MediaStream([
-    ...destination.stream.getAudioTracks(),
-  ]);
-  return { processedStream, gainNode, audioCtx };
+
+  const dataArray = new Float32Array(analyser.fftSize);
+
+  const THRESHOLD = 0.02;
+  const RELEASE_MS = 150; // hold open 150ms after signal drops, prevents word clipping
+
+  let isOpen = false;
+  let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  gainNode.gain.value = 0;
+
+  const interval = setInterval(() => {
+    analyser.getFloatTimeDomainData(dataArray);
+    const rms = Math.sqrt(
+      dataArray.reduce((sum, v) => sum + v * v, 0) / dataArray.length,
+    );
+
+    if (rms > THRESHOLD) {
+      if (releaseTimer) { clearTimeout(releaseTimer); releaseTimer = null; }
+      if (!isOpen) {
+        isOpen = true;
+        gainNode.gain.setTargetAtTime(1, audioCtx.currentTime, 0.01);
+      }
+    } else if (isOpen && !releaseTimer) {
+      releaseTimer = setTimeout(() => {
+        isOpen = false;
+        releaseTimer = null;
+        gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.01);
+      }, RELEASE_MS);
+    }
+  }, 10);
+
+  return interval;
 }
 
 async function getMicStream(): Promise<{
@@ -93,9 +89,22 @@ async function getMicStream(): Promise<{
   const rawStream = await navigator.mediaDevices.getUserMedia({
     audio: AUDIO_CONSTRAINTS,
   });
-  const noiseFree = await applyNoiseSuppression(rawStream);
-  const { processedStream, gainNode, audioCtx } = applyGain(noiseFree);
-  return { stream: processedStream, gainNode, audioCtx };
+
+  const audioCtx = new AudioContext({ sampleRate: 48000 });
+  const source = audioCtx.createMediaStreamSource(rawStream);
+  const gateNode = audioCtx.createGain();   // controlled by noise gate
+  const volumeNode = audioCtx.createGain(); // controlled by user volume slider
+  const destination = audioCtx.createMediaStreamDestination();
+
+  // Chain: source -> gateNode -> volumeNode -> destination
+  applyNoiseGate(audioCtx, source, destination, gateNode);
+  gateNode.connect(volumeNode);
+  volumeNode.connect(destination);
+
+  const processedStream = new MediaStream([
+    ...destination.stream.getAudioTracks(),
+  ]);
+  return { stream: processedStream, gainNode: volumeNode, audioCtx };
 }
 
 function loadVolume(key: string): number {
@@ -164,70 +173,14 @@ export function useVoice(
       };
 
       peer.ontrack = async (e) => {
-      // Clean up any existing audio pipeline for this user
-      if (participantAudio.current[targetUserId]) {
-        participantAudio.current[targetUserId].audioElement.srcObject = null;
-        participantAudio.current[targetUserId].audioCtx.close();
-        delete participantAudio.current[targetUserId];
-      }
+        if (participantAudio.current[targetUserId]) {
+          participantAudio.current[targetUserId].audioElement.srcObject = null;
+          participantAudio.current[targetUserId].audioCtx.close();
+          delete participantAudio.current[targetUserId];
+        }
 
-      const username = userIdToName.current[targetUserId];
-      const savedVolume = username ? loadVolume(username) : 1;
-
-      try {
-        const { RnnoiseWorkletNode, loadRnnoise } = await import("@sapphi-red/web-noise-suppressor");
-
-        const audioCtx = new AudioContext({ sampleRate: 48000 });
-
-        const isElectron = window.location.protocol === "file:";
-
-        const base = new URL("../", import.meta.url).toString();
-
-        const wasmPath = new URL("rnnoise.wasm", base).toString();
-        const wasmSimdPath = new URL("rnnoise_simd.wasm", base).toString();
-        const workletPath = new URL("workletProcessor.js", base).toString();
-
-        const workletRes = await fetch(workletPath);
-        const workletText = await workletRes.text();
-        const workletBlob = new Blob([workletText], { type: 'application/javascript' });
-        const workletBlobUrl = URL.createObjectURL(workletBlob);
-        await audioCtx.audioWorklet.addModule(workletBlobUrl);
-        URL.revokeObjectURL(workletBlobUrl);
-
-        const wasmRes = await fetch(wasmPath);
-        const wasmBinary = await wasmRes.arrayBuffer();
-        const wasmSimdRes = await fetch(wasmSimdPath);
-        const wasmSimdBinary = await wasmSimdRes.arrayBuffer();
-
-        const rnnoiseWasm = await loadRnnoise({
-          wasmBinary: new Uint8Array(wasmBinary),
-          wasmSimdBinary: new Uint8Array(wasmSimdBinary),
-          locateFile: () => "",
-        });
-
-        const source = audioCtx.createMediaStreamSource(e.streams[0]);
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.value = savedVolume;
-
-        const rnnoiseNode = new RnnoiseWorkletNode(audioCtx, {
-          wasmBinary: rnnoiseWasm,
-          maxChannels: 1,
-        });
-
-        source.connect(rnnoiseNode);
-        rnnoiseNode.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-
-        const audioElement = new Audio();
-        audioElement.srcObject = e.streams[0];
-        audioElement.volume = 0;
-        audioElement.autoplay = true;
-        audioElement.play().catch(() => {});
-
-        participantAudio.current[targetUserId] = { audioCtx, gainNode, audioElement };
-
-      } catch (err) {
-        console.warn("Incoming noise suppression failed, falling back to raw audio:", err);
+        const username = userIdToName.current[targetUserId];
+        const savedVolume = username ? loadVolume(username) : 1;
 
         const audioCtx = new AudioContext();
         const gainNode = audioCtx.createGain();
@@ -244,8 +197,7 @@ export function useVoice(
         audioElement.play().catch(() => {});
 
         participantAudio.current[targetUserId] = { audioCtx, gainNode, audioElement };
-      }
-    };
+      };
 
       peer.onconnectionstatechange = () => {
         const state = peer.connectionState;

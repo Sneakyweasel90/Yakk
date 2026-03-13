@@ -331,7 +331,17 @@ function createWindow() {
     }
   });
 }
-
+ipcMain.handle("read-file", async (event, filename) => {
+  // .wasm and workletProcessor.js are unpacked from asar, others are inside it
+  const appPath = app.getAppPath();
+  const unpackedPath = path.join(appPath.replace("app.asar", "app.asar.unpacked"), "dist", filename);
+  const normalPath = path.join(appPath, "dist", filename);
+  try {
+    return fs.readFileSync(unpackedPath);
+  } catch {
+    return fs.readFileSync(normalPath);
+  }
+});
 ipcMain.on("minimize", () => win?.minimize());
 ipcMain.on("maximize", () => win?.isMaximized() ? win.unmaximize() : win.maximize());
 ipcMain.on("close", () => win?.close());
