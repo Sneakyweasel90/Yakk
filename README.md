@@ -1,12 +1,12 @@
-# Yakk
+# Talco
 
-Yakk is a private, invite-only chat application built for real-time text and voice communication. It runs as both a web app (hosted on Railway) and a native desktop application on Windows and Linux via Electron. The name comes from the idea of yakking — talking a lot, without the noise of a public platform.
+Talco is a private, invite-only chat application built for real-time text and voice communication. It runs as both a web app (hosted on Railway) and a native desktop application on Windows and Linux via Electron. The name comes from the idea of Talcoing — talking a lot, without the noise of a public platform.
 
 ---
 
 ## What it does
 
-Yakk is essentially a self-hosted Discord alternative. Users join with an invite code, create an account, and get access to a shared server with text channels, voice channels, and direct messages.
+Talco is essentially a self-hosted Discord alternative. Users join with an invite code, create an account, and get access to a shared server with text channels, voice channels, and direct messages.
 
 **Text channels** work like any standard chat — messages appear in real time, support emoji reactions, replies, edits, and deletion. Admins can delete any message; regular users can only edit or delete their own.
 
@@ -24,7 +24,7 @@ Yakk is essentially a self-hosted Discord alternative. Users join with an invite
 
 ## Architecture
 
-Yakk is split into two main components: a Node.js server and a React frontend.
+Talco is split into two main components: a Node.js server and a React frontend.
 
 ### Server
 
@@ -57,8 +57,8 @@ On startup, the app checks the GitHub Releases API for a newer version. If one e
 
 The desktop build is produced by `electron-builder` and targeted separately per platform:
 
-- Windows: NSIS installer, output as `YakkSetup.exe`
-- Linux: AppImage, output as `Yakk.AppImage`
+- Windows: NSIS installer, output as `TalcoSetup.exe`
+- Linux: AppImage, output as `Talco.AppImage`
 
 ### CI/CD
 
@@ -71,7 +71,7 @@ The web app is deployed continuously via Railway, which builds and deploys on ev
 ## Project structure
 
 ```
-Yakk/
+Talco/
 ├── client/                  React + Vite frontend, Electron wrapper
 │   ├── src/
 │   │   ├── components/      UI components (Chat, Sidebar, ChannelList, etc.)
