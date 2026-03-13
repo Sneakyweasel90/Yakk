@@ -76,7 +76,7 @@ export default function Sidebar({
           letterSpacing: "0.3em", color: theme.primary,
           textShadow: `0 0 15px ${theme.primaryGlow}`,
         }}>
-          TALCO
+          TALKO
         </span>
         <div style={{ height: "1px", width: "40px", marginTop: "4px", background: `linear-gradient(90deg, ${theme.primary}, transparent)` }} />
       </div>

@@ -11,7 +11,7 @@ export default function TitleBar() {
       borderBottom: `1px solid ${theme.border}`,
     }}>
       <span style={{ ...styles.title, color: theme.primary }}>
-        TALCO <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v{APP_VERSION}</span>
+        TALKO <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v{APP_VERSION}</span>
       </span>
       <div style={styles.controls}>
         <button
