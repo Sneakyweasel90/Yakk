@@ -55,19 +55,31 @@ export function useMessages({
       setOldestId(data.oldestId);
     }
 
+    if (data.type === "mention") {
+      const isDM = data.channelId.startsWith("dm:");
+      const title = isDM
+        ? `${data.senderName} mentioned you in a DM`
+        : `${data.senderName} mentioned you in #${data.channelId}`;
+      window.electronAPI?.notify(title, data.content);
+      // Also trigger browser notification for web users
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification(title, { body: data.content });
+      }
+      return;
+    }
+
     if (data.type === "message") {
-      // Only add to message list if it belongs to the channel currently being viewed
       if (data.message.channel_id === currentChannelRef.current) {
         setMessages((prev) => {
           if (prev.find((m) => m.id === data.message.id)) return prev;
           return [...prev, data.message];
         });
-      } else if (data.message.user_id !== currentUserId) {
-        // Notify for messages in other channels (including DMs from the other participant)
-        const isDM = data.message.channel_id.startsWith("dm:");
+      }
+      // Non-mention messages in other channels — keep existing notify for DMs only
+      else if (data.message.user_id !== currentUserId && data.message.channel_id.startsWith("dm:")) {
         window.electronAPI?.notify(
-          isDM ? `DM from ${data.message.username}` : `#${data.message.channel_id}`,
-          `${data.message.username}: ${data.message.content.slice(0, 80)}`,
+          `DM from ${data.message.username}`,
+          data.message.content.slice(0, 80),
         );
       }
     }

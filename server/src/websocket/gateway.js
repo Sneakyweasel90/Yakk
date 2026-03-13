@@ -161,6 +161,12 @@ export async function initWebSocket(server) {
 
     if (!user) { ws.close(1008, "Unauthorized"); return; }
 
+    // Cache the user's current nickname for mention matching
+    const { rows: nickRow } = await db.query(
+      `SELECT nickname FROM users WHERE id = $1`, [user.id]
+    );
+    ws.user = { ...user, nickname: nickRow[0]?.nickname || null };
+
     ws.user = user;
     ws.channels = new Set();
 
@@ -254,6 +260,30 @@ export async function initWebSocket(server) {
         const outMsg = { type: "message", message: { ...rows[0], raw_username: uRaw[0]?.username || user.username, user_role: user.role || 'user', user_custom_role_name: uRaw[0]?.custom_role_name || null, reactions: [], reply_to_username, reply_to_content } };
         if (channelId.startsWith("dm:")) broadcastDM(channelId, outMsg, wss);
         else broadcast(channelId, outMsg);
+
+        // ── @mention notifications ─────────────────────────────────────────────
+        const mentionRegex = /@([\w\s]+?)(?=\s|$|[^a-zA-Z0-9_\s])/g;
+        const mentionedNames = [...content.trim().matchAll(mentionRegex)].map(m => m[1].trim().toLowerCase());
+
+        if (mentionedNames.length > 0) {
+          for (const client of wss.clients) {
+            if (client.readyState !== WebSocket.OPEN || client._yakk_closed) continue;
+            if (client.user?.id === user.id) continue; // don't notify yourself
+            const clientUsername = client.user?.username?.toLowerCase();
+            const clientNickname = client.user?.nickname?.toLowerCase();
+            const isMentioned = mentionedNames.some(
+              n => n === clientUsername || n === clientNickname
+            );
+            if (isMentioned) {
+              client.send(JSON.stringify({
+                type: "mention",
+                channelId,
+                senderName: displayName,
+                content: content.trim().slice(0, 100),
+              }));
+            }
+          }
+        }
       }
 
       // REACT

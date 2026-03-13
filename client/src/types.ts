@@ -91,7 +91,8 @@ export type ServerMessage =
   | { type: "message_edited"; messageId: number; content: string }
   | { type: "message_deleted"; messageId: number }
   | { type: "pong" }
-  | { type: "avatar_update"; userId: number; avatar: string | null };
+  | { type: "avatar_update"; userId: number; avatar: string | null }
+  | { type: "mention"; channelId: string; senderName: string; content: string };
 
 export type ClientMessage =
   | { type: "join"; channelId: string }
