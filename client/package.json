@@ -1,5 +1,5 @@
 {
-  "name": "talco",
+  "name": "talko",
   "private": true,
   "version": "1.12.0",
   "type": "module",
@@ -15,8 +15,8 @@
     "electron:build:linux": "node scripts/copy-worklet.cjs && npm run build && electron-builder --linux"
   },
   "build": {
-    "appId": "com.talco.app",
-    "productName": "Talco",
+    "appId": "com.talko.app",
+    "productName": "Talko",
     "asar": true,
     "asarUnpack": [
       "dist/*.wasm",
@@ -28,13 +28,13 @@
     "win": {
       "target": "nsis",
       "icon": "public/icon.png",
-      "artifactName": "TalcoSetup.exe"
+      "artifactName": "TalkoSetup.exe"
     },
     "linux": {
       "target": ["AppImage"],
       "icon": "public/icon.png",
       "category": "Network",
-      "artifactName": "Talco.AppImage"
+      "artifactName": "Talko.AppImage"
     },
     "files": [
       "dist/**/*",

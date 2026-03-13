@@ -4,12 +4,12 @@ const https = require("https");
 const fs = require("fs");
 const os = require("os");
 
-const GITHUB_REPO = "Sneakyweasel90/Talco";
+const GITHUB_REPO = "Sneakyweasel90/Talko";
 
 let win;
 let progressWin;
 
-const logPath = path.join(os.homedir(), "talco-log.txt");
+const logPath = path.join(os.homedir(), "talko-log.txt");
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   fs.appendFileSync(logPath, line);
@@ -38,9 +38,9 @@ function getPlatformAsset(assets) {
 }
 
 function getDownloadFileName() {
-  if (process.platform === "win32") return "TalcoSetup.exe";
-  if (process.platform === "linux") return "Talco.AppImage";
-  return "Talco";
+  if (process.platform === "win32") return "TalkoSetup.exe";
+  if (process.platform === "linux") return "Talko.AppImage";
+  return "Talko";
 }
 
 function getLatestRelease() {
@@ -49,7 +49,7 @@ function getLatestRelease() {
       hostname: "api.github.com",
       path: `/repos/${GITHUB_REPO}/releases/latest`,
       headers: {
-        "User-Agent": "Talco-App",
+        "User-Agent": "Talko-App",
         "Accept": "application/vnd.github+json",
       },
     };
@@ -145,7 +145,7 @@ function createProgressWindow() {
 function downloadFile(url, destPath, version) {
   return new Promise((resolve, reject) => {
     const attempt = (currentUrl) => {
-      https.get(currentUrl, { headers: { "User-Agent": "Talco-App" } }, (res) => {
+      https.get(currentUrl, { headers: { "User-Agent": "Talko-App" } }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           return attempt(res.headers.location);
         }
@@ -241,7 +241,7 @@ async function checkForUpdates() {
       const { response } = await dialog.showMessageBox({
         type: "info",
         title: "Update Available",
-        message: "A new version of Talco is available!",
+        message: "A new version of Talko is available!",
         detail: `Current version: ${currentVersion}\nNew version: ${latestVersion}\n\nYou must update to continue. Download now?`,
         buttons: ["Download & Install", "Close"],
         defaultId: 0,
@@ -274,7 +274,7 @@ async function checkForUpdates() {
             detail: `Error: ${err.message}\n\nPlease visit GitHub to download manually.`,
             buttons: ["Open GitHub", "Close"],
             }).then(({ response: r }) => {
-              if (r === 0) shell.openExternal(`https://github.com/Sneakyweasel90/Talco/releases`);
+              if (r === 0) shell.openExternal(`https://github.com/Sneakyweasel90/Talko/releases`);
             });
           app.quit();
           return false;

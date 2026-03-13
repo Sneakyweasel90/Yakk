@@ -287,13 +287,13 @@ const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [themeName, setThemeName] = useState(() => {
-    return localStorage.getItem("talco_theme") || "cyberpunk";
+    return localStorage.getItem("talko_theme") || "cyberpunk";
   });
 
   const theme = themes[themeName];
 
   const setTheme = (name) => {
-    localStorage.setItem("talco_theme", name);
+    localStorage.setItem("talko_theme", name);
     setThemeName(name);
   };
 

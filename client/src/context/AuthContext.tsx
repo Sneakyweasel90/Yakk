@@ -21,7 +21,7 @@ const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem("talco_user");
+    const stored = localStorage.getItem("talko_user");
     return stored ? JSON.parse(stored) : null;
   });
 
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshToken: currentUser.refreshToken,
       });
       const updated: User = { ...currentUser, token: data.token, refreshToken: data.refreshToken };
-      localStorage.setItem("talco_user", JSON.stringify(updated));
+      localStorage.setItem("talko_user", JSON.stringify(updated));
       setUser(updated);
       scheduleRefresh(updated);
     } catch {
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             refreshToken: user.refreshToken,
           });
           const updated: User = { ...user, token: data.token, refreshToken: data.refreshToken };
-          localStorage.setItem("talco_user", JSON.stringify(updated));
+          localStorage.setItem("talko_user", JSON.stringify(updated));
           setUser(updated);
           scheduleRefresh(updated);
         } catch {
@@ -88,14 +88,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       console.warn("Failed to publish E2E public key");
     }
-    localStorage.setItem("talco_user", JSON.stringify(userData));
+    localStorage.setItem("talko_user", JSON.stringify(userData));
     setUser(userData);
     scheduleRefresh(userData);
   }, [scheduleRefresh]);
 
   const logout = useCallback(async () => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    const stored = localStorage.getItem("talco_user");
+    const stored = localStorage.getItem("talko_user");
     if (stored) {
       const u: User = JSON.parse(stored);
       try {
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch { /* best effort */ }
     }
     e2eKeyStore.clear();
-    localStorage.removeItem("talco_user");
+    localStorage.removeItem("talko_user");
     setUser(null);
   }, []);
 
@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, nickname };
-      localStorage.setItem("talco_user", JSON.stringify(updated));
+      localStorage.setItem("talko_user", JSON.stringify(updated));
       return updated;
     });
   }, []);
@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, avatar };
-      localStorage.setItem("talco_user", JSON.stringify(updated));
+      localStorage.setItem("talko_user", JSON.stringify(updated));
       return updated;
     });
   }, []);
