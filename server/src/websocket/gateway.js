@@ -166,8 +166,6 @@ export async function initWebSocket(server) {
       `SELECT nickname FROM users WHERE id = $1`, [user.id]
     );
     ws.user = { ...user, nickname: nickRow[0]?.nickname || null };
-
-    ws.user = user;
     ws.channels = new Set();
 
     await redis.sAdd("online_users", String(user.id));
@@ -202,13 +200,28 @@ export async function initWebSocket(server) {
           hasMore: rows.length === 50,
           oldestId: messages.length > 0 ? messages[0].id : null,
         }));
-
         // Send current voice occupancy snapshot to newly joined client
         const voiceState = getVoiceState();
         if (Object.keys(voiceState).length > 0) {
           ws.send(JSON.stringify({ type: "voice_state", channels: voiceState }));
         }
       }
+
+      // Send unread counts for all text channels to the joining client
+        const { rows: unreadRows } = await db.query(
+          `SELECT c.name,
+            COUNT(m.id)::int AS unread
+          FROM channels c
+          LEFT JOIN messages m ON m.channel_id = c.name
+          LEFT JOIN channel_last_read clr ON clr.channel_name = c.name AND clr.user_id = $1
+          WHERE c.type = 'text'
+            AND (clr.last_read_at IS NULL OR m.created_at > clr.last_read_at)
+          GROUP BY c.name`,
+          [user.id]
+        );
+        const unreadMap = {};
+        for (const row of unreadRows) unreadMap[row.name] = row.unread;
+        ws.send(JSON.stringify({ type: "channel_unread_counts", counts: unreadMap }));
 
       // LOAD MORE — cursor-based: fetch 50 messages before a given ID (no OFFSET)
       if (msg.type === "load_more") {
@@ -260,6 +273,16 @@ export async function initWebSocket(server) {
         const outMsg = { type: "message", message: { ...rows[0], raw_username: uRaw[0]?.username || user.username, user_role: user.role || 'user', user_custom_role_name: uRaw[0]?.custom_role_name || null, reactions: [], reply_to_username, reply_to_content } };
         if (channelId.startsWith("dm:")) broadcastDM(channelId, outMsg, wss);
         else broadcast(channelId, outMsg);
+
+        // Increment unread count for clients not currently viewing this channel
+        if (!channelId.startsWith("dm:")) {
+          for (const client of wss.clients) {
+            if (client.readyState !== WebSocket.OPEN || client._yakk_closed) continue;
+            if (client.user?.id === user.id) continue; // don't count your own messages
+            if (client.channels?.has(channelId)) continue; // they're looking at it right now
+            client.send(JSON.stringify({ type: "channel_unread_increment", channelName: channelId }));
+          }
+        }
 
         // ── @mention notifications ─────────────────────────────────────────────
         const mentionRegex = /@([\w\s]+?)(?=\s|$|[^a-zA-Z0-9_\s])/g;

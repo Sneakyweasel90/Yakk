@@ -7,6 +7,7 @@ import type { OnlineUser, DMConversation } from "../../types";
 
 interface Props {
   channel: string;
+  unreadCounts: Record<string, number>;
   setChannel: (c: string) => void;
   voiceChannel: string | null;
   joinVoice: (c: string) => void;
@@ -38,7 +39,7 @@ interface Props {
 }
 
 export default function Sidebar({
-  channel, setChannel, voiceChannel, joinVoice, leaveVoice,
+  channel, setChannel, voiceChannel, joinVoice, leaveVoice, unreadCounts,
   logout, username, nickname, avatar, userId, token, role, customRoleName,
   onlineUsers, onSearchOpen, onNicknameChange, onAvatarChange,
   participants, voiceOccupancy,
@@ -124,6 +125,7 @@ export default function Sidebar({
             onCreateChannel={createChannel}
             onCancelCreate={cancelCreate}
             voiceOccupancy={voiceOccupancy}
+            unreadCounts={unreadCounts}
           />
         </div>
       )}

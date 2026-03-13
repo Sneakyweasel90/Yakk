@@ -12,6 +12,20 @@ router.get("/", requireAuth, async (req, res) => {
   res.json(rows);
 });
 
+// POST /api/channels/read — mark a text channel as read
+router.post("/read", requireAuth, async (req, res) => {
+  const { channelName } = req.body;
+  if (!channelName) return res.status(400).json({ error: "Missing channelName" });
+
+  await db.query(
+    `INSERT INTO channel_last_read (user_id, channel_name, last_read_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (user_id, channel_name) DO UPDATE SET last_read_at = NOW()`,
+    [req.user.id, channelName]
+  );
+  res.json({ ok: true });
+});
+
 // POST create a new channel
 router.post("/", requireAuth, async (req, res) => {
   const { name, type = "text" } = req.body;

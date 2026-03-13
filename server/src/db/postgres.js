@@ -125,6 +125,16 @@ export async function initDB() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS channel_last_read (
+      user_id INT REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+      channel_name VARCHAR(100) NOT NULL,
+      last_read_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, channel_name)
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_channel_last_read ON channel_last_read(user_id);`);
+
+  await pool.query(`
     INSERT INTO channels (name, type) VALUES
       ('general', 'text'),
       ('random', 'text'),
@@ -134,7 +144,7 @@ export async function initDB() {
     ON CONFLICT (name) DO NOTHING;
   `);
 
-  console.log("✅ DB tables ready");
+  console.log("DB tables ready");
 }
 
 export default pool;

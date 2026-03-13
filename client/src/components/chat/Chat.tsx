@@ -18,11 +18,13 @@ import SearchOverlay from "../overlays/SearchOverlay";
 import UserPopover from "../overlays/UserPopover";
 
 import type { OnlineUser, DMConversation, GroupedMessage } from "../../types";
+import { useUnreadChannels } from "../../hooks/useUnreadChannels";
 
 export default function Chat() {
   const { user, logout, updateNickname, updateAvatar } = useAuth();
   const { resolve, load, nicknames } = useLocalNicknames();
   const { theme } = useTheme();
+  const { unreadCounts, handleUnreadMessage, markChannelRead } = useUnreadChannels(user!.token);
 
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
@@ -33,6 +35,10 @@ export default function Chat() {
   }, [resolve, nicknames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [channel, setChannel] = useState("general");
+  const handleSelectChannel = useCallback((name: string) => {
+    setChannel(name);
+    markChannelRead(name);
+  }, [markChannelRead]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [voiceOccupancy, setVoiceOccupancy] = useState<Record<string, string[]>>({});
   const [showSearch, setShowSearch] = useState(false);
@@ -112,6 +118,8 @@ export default function Chat() {
         handleVoiceMessage(data);
       } else if (data.type === "presence") {
         setOnlineUsers(data.users);
+      } else if (data.type === "channel_unread_counts" || data.type === "channel_unread_increment") {
+          handleUnreadMessage(data);
       } else if (data.type === "avatar_update") {
         setAvatarMap(prev => ({ ...prev, [data.userId]: data.avatar }));
       } else {
@@ -173,7 +181,8 @@ export default function Chat() {
         <ResizableSidebar>
           <Sidebar
             channel={channel}
-            setChannel={setChannel}
+            setChannel={handleSelectChannel}
+            unreadCounts={unreadCounts}
             voiceChannel={voiceChannel}
             participants={participants}
             joinVoice={joinVoice}

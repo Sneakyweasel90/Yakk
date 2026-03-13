@@ -75,6 +75,7 @@ interface ChannelListProps {
   creating: boolean;
   showCreateText: boolean;
   showCreateVoice: boolean;
+  unreadCounts: Record<string, number>;
   voiceOccupancy: Record<string, string[]>;
   onSelectChannel: (name: string) => void;
   onJoinVoice: (name: string) => void;
@@ -85,9 +86,11 @@ interface ChannelListProps {
   onChannelNameChange: (val: string) => void;
   onCreateChannel: (type: "text" | "voice") => void;
   onCancelCreate: () => void;
+  
 }
 
 export default function ChannelList({
+  unreadCounts,
   textChannels,
   voiceChannels,
   activeChannel,
@@ -111,7 +114,7 @@ export default function ChannelList({
 }: ChannelListProps) {
   const { theme } = useTheme();
 
-  const channelStyle = (isActive: boolean) => ({
+  const channelStyle = (isActive: boolean, hasUnread: boolean) => ({
     padding: "0.4rem 1rem",
     cursor: "pointer",
     fontSize: "0.88rem",
@@ -122,8 +125,8 @@ export default function ChannelList({
     transition: "all 0.15s",
     margin: "1px 0",
     fontFamily: "'Rajdhani', sans-serif",
-    fontWeight: 600,
-    color: isActive ? theme.primary : theme.textDim,
+    fontWeight: isActive || hasUnread ? 700 : 600,
+    color: isActive ? theme.primary : hasUnread ? theme.text : theme.textDim,
     background: isActive ? theme.primaryGlow : "transparent",
     borderLeft: isActive
       ? `2px solid ${theme.primary}`
@@ -179,47 +182,43 @@ export default function ChannelList({
         />
       )}
 
-      {textChannels.map((ch) => (
-        <div
-          key={ch.id}
-          onClick={() => onSelectChannel(ch.name)}
-          style={channelStyle(ch.name === activeChannel)}
-        >
+      {textChannels.map((ch) => {
+      const isActive = ch.name === activeChannel;
+      const unread = unreadCounts[ch.name] ?? 0;
+      return (
+        <div key={ch.id} onClick={() => onSelectChannel(ch.name)} style={channelStyle(isActive, unread > 0)}>
           <span style={{ color: theme.border }}>#</span>
           <span style={{ flex: 1 }}>{ch.name}</span>
-          {ch.name === activeChannel && (
-            <div
-              style={{
-                width: "5px",
-                height: "5px",
-                borderRadius: "50%",
-                flexShrink: 0,
-                background: theme.primary,
-                boxShadow: `0 0 6px ${theme.primary}`,
-              }}
-            />
-          )}
-          {ch.created_by !== null && (
-            <span
-              onClick={(e) => onDeleteChannel(ch.id, e)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "1rem",
-                lineHeight: 1,
-                opacity: 0.4,
-                padding: "0",
-                flexShrink: 0,
-                color: theme.textDim,
-              }}
-              title="Delete channel"
-            >
-              ×
+
+          {!isActive && unread > 0 && (
+            <span style={{
+              background: theme.primary, color: theme.background,
+              borderRadius: "8px", padding: "0px 5px",
+              fontSize: "0.6rem", fontFamily: "'Share Tech Mono', monospace",
+              fontWeight: 700, minWidth: "16px", textAlign: "center", flexShrink: 0,
+            }}>
+              {unread > 99 ? "99+" : unread}
             </span>
           )}
+
+          {isActive && (
+            <div style={{
+              width: "5px", height: "5px", borderRadius: "50%",
+              flexShrink: 0, background: theme.primary,
+              boxShadow: `0 0 6px ${theme.primary}`,
+            }} />
+          )}
+
+          {ch.created_by !== null && (
+            <span onClick={(e) => onDeleteChannel(ch.id, e)} style={{
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: "1rem", lineHeight: 1, opacity: 0.4,
+              padding: "0", flexShrink: 0, color: theme.textDim,
+            }} title="Delete channel">×</span>
+          )}
         </div>
-      ))}
+      );
+    })}
 
       {/* Voice channels */}
       <div
@@ -294,7 +293,7 @@ export default function ChannelList({
                     ? onLeaveVoice()
                     : onJoinVoice(ch.name)
                 }
-                style={{ ...channelStyle(ch.name === voiceChannel), flex: 1 }}
+                style={{ ...channelStyle(ch.name === voiceChannel, false), flex: 1 }}
               >
                 <span style={{ color: theme.textDim }}>◈</span>
                 <span style={{ flex: 1 }}>{ch.name.replace("voice-", "")}</span>

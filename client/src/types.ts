@@ -92,7 +92,9 @@ export type ServerMessage =
   | { type: "message_deleted"; messageId: number }
   | { type: "pong" }
   | { type: "avatar_update"; userId: number; avatar: string | null }
-  | { type: "mention"; channelId: string; senderName: string; content: string };
+  | { type: "mention"; channelId: string; senderName: string; content: string }
+  | { type: "channel_unread_counts"; counts: Record<string, number> }
+  | { type: "channel_unread_increment"; channelName: string };
 
 export type ClientMessage =
   | { type: "join"; channelId: string }

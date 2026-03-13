@@ -195,7 +195,7 @@ export default function MessageInput({ send, channel, replyTo, onCancelReply, on
       if (!isDragging) setIsDragging(true);
     }}
     onDragLeave={(e) => {
-      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) return;
       setIsDragging(false);
     }}
     onDrop={(e) => {
