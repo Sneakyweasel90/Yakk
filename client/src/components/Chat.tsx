@@ -18,6 +18,7 @@ import axios from "axios";
 import { useDMs } from "../hooks/useDMs";
 import DMHeader from "./DMHeader";
 import config from "../config";
+import MemberList from "./MemberList";
 import type { OnlineUser, DMConversation } from "../types";
 
 export default function Chat() {
@@ -268,7 +269,6 @@ export default function Chat() {
               </span>
             </div>
           )}
-
           {/* Messages */}
           <div ref={messagesContainerRef} style={{ flex: 1, overflowY: "auto", padding: "0 1rem 0.5rem" }} onScroll={handleScroll}>
             <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
@@ -331,6 +331,12 @@ export default function Chat() {
             onlineUsers={onlineUsers}
           />
         </div>
+
+         <MemberList
+            onlineUsers={onlineUsers}
+            currentUserId={user!.id}
+            onUserClick={(userId, username, el) => setPopover({ userId, username, el })}
+          />
       </div>
 
       {popover && (

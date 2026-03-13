@@ -21,7 +21,7 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  "https://yakk-production.up.railway.app",
+  "https://talco-production.up.railway.app",
   "http://localhost:5173",
   "http://localhost:4000",
 ];
@@ -61,4 +61,4 @@ await initWebSocket(server);
 setInterval(cleanupExpiredTokens, 60 * 60 * 1000);
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => console.log(`🦆 Yakk server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Talco server running on port ${PORT}`));

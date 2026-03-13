@@ -308,6 +308,24 @@ function createWindow() {
     },
   });
 
+  win.webContents.setVisualZoomLevelLimits(1, 1);
+
+  win.webContents.on("did-finish-load", () => {
+    win.webContents.setZoomFactor(1);
+  });
+
+  win.webContents.on("zoom-changed", (event, direction) => {
+    event.preventDefault();
+    win.webContents.setZoomFactor(1);
+  });
+
+  win.webContents.on("before-input-event", (event, input) => {
+    if ((input.control || input.meta) && ["+", "-", "=", "0"].includes(input.key)) {
+      event.preventDefault();
+    }
+  });
+
+
   if (process.env.NODE_ENV === "development") {
     win.loadURL("http://localhost:5173");
     win.webContents.openDevTools();
