@@ -1,7 +1,7 @@
 {
-  "name": "yakk",
+  "name": "Talco",
   "private": true,
-  "version": "1.11.2",
+  "version": "1.11.4",
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
@@ -15,8 +15,8 @@
     "electron:build:linux": "node scripts/copy-worklet.cjs && npm run build && electron-builder --linux"
   },
   "build": {
-    "appId": "com.yakk.app",
-    "productName": "Yakk",
+    "appId": "com.talco.app",
+    "productName": "Talco",
     "asar": true,
     "asarUnpack": [
       "dist/*.wasm",
@@ -28,13 +28,13 @@
     "win": {
       "target": "nsis",
       "icon": "public/icon.png",
-      "artifactName": "YakkSetup.exe"
+      "artifactName": "TalcoSetup.exe"
     },
     "linux": {
       "target": ["AppImage"],
       "icon": "public/icon.png",
       "category": "Network",
-      "artifactName": "Yakk.AppImage"
+      "artifactName": "Talco.AppImage"
     },
     "files": [
       "dist/**/*",

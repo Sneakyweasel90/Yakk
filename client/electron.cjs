@@ -4,7 +4,7 @@ const https = require("https");
 const fs = require("fs");
 const os = require("os");
 
-const GITHUB_REPO = "Sneakyweasel90/Yakk";
+const GITHUB_REPO = "Sneakyweasel90/Talco";
 
 let win;
 let progressWin;
@@ -38,8 +38,8 @@ function getPlatformAsset(assets) {
 }
 
 function getDownloadFileName() {
-  if (process.platform === "win32") return "YakkSetup.exe";
-  if (process.platform === "linux") return "Yakk.AppImage";
+  if (process.platform === "win32") return "TalcoSetup.exe";
+  if (process.platform === "linux") return "Talco.AppImage";
   return "Yakk";
 }
 
@@ -241,7 +241,7 @@ async function checkForUpdates() {
       const { response } = await dialog.showMessageBox({
         type: "info",
         title: "Update Available",
-        message: "A new version of Yakk is available!",
+        message: "A new version of Talco is available!",
         detail: `Current version: ${currentVersion}\nNew version: ${latestVersion}\n\nYou must update to continue. Download now?`,
         buttons: ["Download & Install", "Close"],
         defaultId: 0,
@@ -274,7 +274,7 @@ async function checkForUpdates() {
             detail: `Error: ${err.message}\n\nPlease visit GitHub to download manually.`,
             buttons: ["Open GitHub", "Close"],
             }).then(({ response: r }) => {
-              if (r === 0) shell.openExternal(`https://github.com/Sneakyweasel90/Yakk/releases`);
+              if (r === 0) shell.openExternal(`https://github.com/Sneakyweasel90/Talco/releases`);
             });
           app.quit();
           return false;
