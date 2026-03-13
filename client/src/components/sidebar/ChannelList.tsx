@@ -1,6 +1,6 @@
-import { useTheme } from "../context/ThemeContext";
-import Avatar from "./Avatar";
-import type { Channel } from "../types";
+import { useTheme } from "../../context/ThemeContext";
+import Avatar from "../ui/Avatar";
+import type { Channel } from "../../types";
 
 interface CreateChannelInputProps {
   type: "text" | "voice";

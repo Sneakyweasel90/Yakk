@@ -1,5 +1,5 @@
-import { useTheme } from "../context/ThemeContext";
-import { APP_VERSION } from "../version";
+import { useTheme } from "../../context/ThemeContext";
+import { APP_VERSION } from "../../version";
 
 export default function TitleBar() {
   const { theme } = useTheme();

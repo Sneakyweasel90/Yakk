@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
-import { useTheme } from "../context/ThemeContext";
-import config from "../config";
-import type { SearchResult } from "../types";
+import { useTheme } from "../../context/ThemeContext";
+import config from "../../config";
+import type { SearchResult } from "../../types";
 
 interface ContextMessage {
   id: number;

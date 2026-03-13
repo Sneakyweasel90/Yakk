@@ -1,4 +1,4 @@
-import { useTheme, themes } from "../context/ThemeContext";
+import { useTheme, themes } from "../../context/ThemeContext";
 
 export default function ThemePicker({ onClose }) {
   const { theme, themeName, setTheme } = useTheme();

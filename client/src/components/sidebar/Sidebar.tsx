@@ -1,9 +1,9 @@
 import { useEffect } from "react";
-import { useTheme } from "../context/ThemeContext";
-import { useChannels } from "../hooks/useChannels";
+import { useTheme } from "../../context/ThemeContext";
+import { useChannels } from "../../hooks/useChannels";
 import ChannelList from "./ChannelList";
 import SidebarFooter from "./SidebarFooter";
-import type { OnlineUser, DMConversation } from "../types";
+import type { OnlineUser, DMConversation } from "../../types";
 
 interface Props {
   channel: string;

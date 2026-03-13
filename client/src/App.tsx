@@ -4,7 +4,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { LocalNicknameProvider } from "./context/LocalNicknameContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import Chat from "./components/Chat";
+import Chat from "./components/chat/Chat";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();

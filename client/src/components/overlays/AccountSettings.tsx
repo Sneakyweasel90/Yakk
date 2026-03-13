@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
-import { useTheme } from "../context/ThemeContext";
-import Avatar from "./Avatar";
-import config from "../config";
-import type { AdminUser, UserRole } from "../types";
-import { RoleBadge } from "./RoleBadge";
+import { useTheme } from "../../context/ThemeContext";
+import Avatar from "../ui/Avatar";
+import config from "../../config";
+import type { AdminUser, UserRole } from "../../types";
+import { RoleBadge } from "../ui/RoleBadge";
 
 interface Props {
   user: {

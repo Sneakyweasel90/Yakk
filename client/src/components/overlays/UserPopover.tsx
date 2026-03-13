@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { useTheme } from "../context/ThemeContext";
-import { useLocalNicknames } from "../context/LocalNicknameContext";
-import Avatar from "./Avatar";
+import { useTheme } from "../../context/ThemeContext";
+import { useLocalNicknames } from "../../context/LocalNicknameContext";
+import Avatar from "../ui/Avatar";
 
 interface Props {
   userId: number;

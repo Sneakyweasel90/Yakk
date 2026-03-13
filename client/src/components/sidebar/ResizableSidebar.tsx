@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../../context/ThemeContext";
 
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 400;

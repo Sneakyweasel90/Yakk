@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useTheme } from "../context/ThemeContext";
-import Avatar from "./Avatar";
-import ThemePicker from "./ThemePicker";
-import AccountSettings from "./AccountSettings";
-import DMList from "./DMList";
-import type { OnlineUser, DMConversation, UserRole } from "../types";
+import { useTheme } from "../../context/ThemeContext";
+import Avatar from "../ui/Avatar";
+import ThemePicker from "../overlays/ThemePicker";
+import AccountSettings from "../overlays/AccountSettings";
+import DMList from "../dm/DMList";
+import type { OnlineUser, DMConversation, UserRole } from "../../types";
 
 interface SidebarFooterProps {
   username: string;

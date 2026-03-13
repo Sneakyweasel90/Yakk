@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useTheme } from "../context/ThemeContext";
-import Avatar from "./Avatar";
-import type { DMConversation, OnlineUser } from "../types";
+import { useTheme } from "../../context/ThemeContext";
+import Avatar from "../ui/Avatar";
+import type { DMConversation, OnlineUser } from "../../types";
 
 interface Props {
   conversations: DMConversation[];

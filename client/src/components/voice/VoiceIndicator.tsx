@@ -1,6 +1,5 @@
-import { useTheme } from "../context/ThemeContext";
-import { useVoiceControls } from "../hooks/useVoiceControls";
-import type { MutableRefObject } from "react";
+import { useTheme } from "../../context/ThemeContext";
+import { useVoiceControls } from "../../hooks/useVoiceControls";
 
 interface Props {
   inVoice: boolean;

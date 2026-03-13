@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useTheme } from "../context/ThemeContext";
-import type { GroupedMessage, OnlineUser } from "../types";
+import { useTheme } from "../../context/ThemeContext";
+import type { GroupedMessage, OnlineUser } from "../../types";
 
 interface Props {
   send: (msg: object) => void;

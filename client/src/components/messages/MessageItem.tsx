@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState } from "react";
-import { RoleBadge } from "./RoleBadge";
-import type { GroupedMessage, Reaction } from "../types";
-import { useTheme } from "../context/ThemeContext";
-import Avatar from "./Avatar";
+import { RoleBadge } from "../ui/RoleBadge";
+import type { GroupedMessage, Reaction } from "../../types";
+import { useTheme } from "../../context/ThemeContext";
+import Avatar from "../ui/Avatar";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 

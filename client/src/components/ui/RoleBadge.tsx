@@ -1,5 +1,5 @@
-import { useTheme } from "../context/ThemeContext";
-import type { UserRole } from "../types";
+import { useTheme } from "../../context/ThemeContext";
+import type { UserRole } from "../../types";
 
 export function RoleBadge({ role, customRoleName }: { role: UserRole; customRoleName?: string | null }) {
   const { theme } = useTheme();

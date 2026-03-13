@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../../context/ThemeContext";
 import Avatar from "./Avatar";
-import type { OnlineUser } from "../types";
+import type { OnlineUser } from "../../types";
 
 interface Props {
   onlineUsers: OnlineUser[];
