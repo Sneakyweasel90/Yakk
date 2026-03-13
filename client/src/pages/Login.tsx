@@ -41,7 +41,7 @@ export default function Login() {
       {/* Drag region across the top */}
       <div style={{ ...styles.dragbar, background: theme.surface2, borderBottom: `1px solid ${theme.border}` }}>
         <span style={{ ...styles.dragTitle, color: theme.primary }}>
-          YAKK <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v{APP_VERSION}</span>
+          TALCO <span style={{ color: theme.textDim, fontSize: "0.6rem" }}>v{APP_VERSION}</span>
         </span>
         <div style={styles.winControls}>
           <button style={{ ...styles.winBtn, color: theme.textDim }} onClick={() => window.electronAPI?.minimize()}>─</button>
@@ -66,7 +66,7 @@ export default function Login() {
       }}>
         <div style={{ ...styles.scanline, background: `linear-gradient(90deg, transparent, ${theme.primaryDim}, transparent)` }} />
         <div style={styles.logoWrap}>
-          <h1 style={{ ...styles.logo, color: theme.primary, textShadow: `0 0 20px ${theme.primaryDim}` }}>YAKK</h1>
+          <h1 style={{ ...styles.logo, color: theme.primary, textShadow: `0 0 20px ${theme.primaryDim}` }}>TALCO</h1>
           <div style={{ ...styles.logoSub, color: theme.textDim }}>SECURE CHANNEL ACCESS</div>
         </div>
         <form onSubmit={handleSubmit} style={styles.form}>

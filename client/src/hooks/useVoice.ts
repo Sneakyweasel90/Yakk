@@ -108,12 +108,12 @@ async function getMicStream(): Promise<{
 }
 
 function loadVolume(key: string): number {
-  const val = localStorage.getItem(`yakk_vol_${key}`);
+  const val = localStorage.getItem(`talco_vol_${key}`);
   return val !== null ? parseFloat(val) : 1;
 }
 
 function saveVolume(key: string, vol: number) {
-  localStorage.setItem(`yakk_vol_${key}`, String(vol));
+  localStorage.setItem(`talco_vol_${key}`, String(vol));
 }
 
 // Per-participant audio pipeline: AudioContext + GainNode for volume above 1

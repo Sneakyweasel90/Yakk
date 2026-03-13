@@ -9,7 +9,7 @@ const GITHUB_REPO = "Sneakyweasel90/Talco";
 let win;
 let progressWin;
 
-const logPath = path.join(os.homedir(), "yakk-log.txt");
+const logPath = path.join(os.homedir(), "talco-log.txt");
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
   fs.appendFileSync(logPath, line);
@@ -40,7 +40,7 @@ function getPlatformAsset(assets) {
 function getDownloadFileName() {
   if (process.platform === "win32") return "TalcoSetup.exe";
   if (process.platform === "linux") return "Talco.AppImage";
-  return "Yakk";
+  return "Talco";
 }
 
 function getLatestRelease() {
@@ -49,7 +49,7 @@ function getLatestRelease() {
       hostname: "api.github.com",
       path: `/repos/${GITHUB_REPO}/releases/latest`,
       headers: {
-        "User-Agent": "Yakk-App",
+        "User-Agent": "Talco-App",
         "Accept": "application/vnd.github+json",
       },
     };
@@ -145,7 +145,7 @@ function createProgressWindow() {
 function downloadFile(url, destPath, version) {
   return new Promise((resolve, reject) => {
     const attempt = (currentUrl) => {
-      https.get(currentUrl, { headers: { "User-Agent": "Yakk-App" } }, (res) => {
+      https.get(currentUrl, { headers: { "User-Agent": "Talco-App" } }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
           return attempt(res.headers.location);
         }
