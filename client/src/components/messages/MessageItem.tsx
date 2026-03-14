@@ -257,9 +257,11 @@ export default function MessageItem({
               {msg.reply_to_username}
             </span>
             <span style={{ color: theme.textDim }}>
-              {msg.reply_to_content.length > 80
-                ? msg.reply_to_content.slice(0, 80) + "…"
-                : msg.reply_to_content}
+              {msg.reply_to_content.startsWith("[img]")
+                ? "[image]"
+                : msg.reply_to_content.length > 80
+                  ? msg.reply_to_content.slice(0, 80) + "…"
+                  : msg.reply_to_content}
             </span>
           </div>
         )}
@@ -295,7 +297,7 @@ export default function MessageItem({
             <button type="button" onClick={() => { setEditing(false); setEditText(msg.content); }} style={{ background: "none", border: `1px solid ${theme.border}`, borderRadius: "3px", color: theme.textDim, fontSize: "0.7rem", padding: "2px 8px", cursor: "pointer", fontFamily: "'Share Tech Mono', monospace" }}>CANCEL</button>
           </form>
         ) : (
-          <div style={{ fontSize: "0.9rem", lineHeight: 1.5, wordBreak: "break-word", color: theme.text, paddingRight: "4.5rem" }}>
+          <div style={{ fontSize: "0.9rem", lineHeight: 1.5, wordBreak: "break-word", color: theme.text }}>
             {renderContent(msg.content, theme.primary, theme.border)}
             {msg.edited_at && (
               <span style={{ fontSize: "0.65rem", color: theme.textDim, marginLeft: "6px", fontFamily: "'Share Tech Mono', monospace", opacity: 0.6 }}>(edited)</span>
@@ -311,8 +313,24 @@ export default function MessageItem({
             currentUsername={currentUsername}
             onReact={onReact}
           />
+        </div>
 
-          {(isHovered || isPickerOpen || editing) && (
+        {(isHovered || isPickerOpen || editing) && (
+          <div style={{
+            position: "absolute",
+            top: "-18px",
+            right: "0",
+            display: "flex",
+            gap: "4px",
+            alignItems: "center",
+            background: theme.surface,
+            border: `1px solid ${theme.border}`,
+            borderRadius: "6px",
+            padding: "2px 4px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+            zIndex: 10,
+          }}>
+
             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
               {/* Reply button */}
               <button
@@ -408,11 +426,11 @@ export default function MessageItem({
                     onClose={() => { onPickerToggle(null); onHover(null); }}
                   />
                 )}
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
-    </div>
   );
 }

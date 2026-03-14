@@ -174,3 +174,15 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
   width: "100%",
 };
+
+const btnStyle: React.CSSProperties = {
+  background: "none",
+  border: "1px solid",
+  cursor: "pointer",
+  fontSize: "0.6rem",
+  padding: "2px 7px",
+  borderRadius: "2px",
+  fontFamily: "'Share Tech Mono', monospace",
+  letterSpacing: "0.08em",
+  transition: "all 0.15s",
+};

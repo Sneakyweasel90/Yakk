@@ -360,9 +360,11 @@ export default function MessageInput({ send, channel, replyTo, onCancelReply, on
           <span style={{ color: theme.textDim }}>
             <span style={{ color: theme.primary, marginRight: "6px" }}>↩ replying to {replyTo.username}</span>
             <span style={{ opacity: 0.6 }}>
-              {replyTo.content.length > 60
-                ? replyTo.content.slice(0, 60) + "…"
-                : replyTo.content}
+              {replyTo.content.startsWith("[img]")
+                ? "[image]"
+                : replyTo.content.length > 60
+                  ? replyTo.content.slice(0, 60) + "…"
+                  : replyTo.content}
             </span>
           </span>
           <button
