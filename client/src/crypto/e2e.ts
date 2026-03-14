@@ -1,5 +1,5 @@
 /**
- * E2E Encryption for Yakk using Web Crypto API (ECDH + AES-GCM)
+ * E2E Encryption for Talco using Web Crypto API (ECDH + AES-GCM)
  *
  * Flow:
  * 1. On login, attempt to load a persisted ECDH private key from IndexedDB.

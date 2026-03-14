@@ -31,7 +31,7 @@ export function useWebSocket(
     let heartbeatInterval: ReturnType<typeof setInterval>;
 
     ws.current.onopen = () => {
-      console.log("Yakk connected");
+      console.log("Talco connected");
 
       if (currentChannelRef.current) {
         ws.current!.send(JSON.stringify({ type: "join", channelId: currentChannelRef.current }));

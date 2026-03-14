@@ -86,7 +86,7 @@ export default function Login() {
           </div>
           {error && <p style={{ ...styles.error, color: theme.error }}>⚠ {error}</p>}
           <button style={{ ...styles.button, color: theme.primary, border: `1px solid ${theme.primaryDim}` }} type="submit" disabled={loading}>
-            {loading ? "CONNECTING..." : "JACK IN"}
+            {loading ? "CONNECTING..." : "LOG IN"}
           </button>
         </form>
         <p style={{ ...styles.link, color: theme.textDim }}>
