@@ -301,3 +301,17 @@
   display: block;
   margin: 0;
 }
+
+.editInput {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--primary-dim);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 0.9rem;
+  padding: 3px 8px;
+  font-family: 'Share Tech Mono', monospace;
+  outline: none;
+  resize: none;
+  line-height: 1.4;
+}

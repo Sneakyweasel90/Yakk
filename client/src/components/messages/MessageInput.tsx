@@ -39,7 +39,7 @@ async function compressImage(file: File): Promise<string> {
 export default function MessageInput({ send, channel, replyTo, onCancelReply, onlineUsers = [] }: Props) {
   const [text, setText] = useState("");
   const typingRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -93,7 +93,7 @@ export default function MessageInput({ send, channel, replyTo, onCancelReply, on
     setMentionIndex(0);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setText(val);
     parseMention(val, e.target.selectionStart ?? val.length);
@@ -235,13 +235,21 @@ export default function MessageInput({ send, channel, replyTo, onCancelReply, on
             </button>
             &gt;
           </span>
-          <input
+          <textarea
             ref={inputRef}
             className={styles.textInput}
             placeholder={replyTo ? `reply to ${replyTo.username}...` : `transmit to #${channel}...`}
             value={text}
             onChange={handleChange}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend(e as any);
+              } else {
+                handleKeyDown(e);
+              }
+            }}
+            rows={1}
           />
         </div>
         <button type="submit" className={styles.sendBtn}>

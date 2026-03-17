@@ -5,3 +5,18 @@ client/node_modules
 /server/node_modules
 *.pak
 /client/dist_electron
+
+# Environment files
+server/.env
+client/.env
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build outputs
+client/dist/
+
+# Misc
+.DS_Store

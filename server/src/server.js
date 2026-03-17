@@ -14,6 +14,7 @@ import dmRoutes from "./routes/dm.routes.js";
 import { initWebSocket } from "./websocket/gateway.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 import voiceRoutes from "./routes/voice.routes.js";
+import helmet from "helmet"
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,7 @@ const allowedOrigins = [
   "http://localhost:4000",
 ];
 
+app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);

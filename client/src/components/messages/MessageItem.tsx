@@ -240,15 +240,20 @@ export default function MessageItem({
             onMouseEnter={(e) => e.stopPropagation()}
             onMouseLeave={(e) => e.stopPropagation()}
           >
-            <input
+            <textarea
               autoFocus
               className={styles.editInput}
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Escape") { setEditing(false); setEditText(msg.content); } }}
-              onMouseEnter={(e) => e.stopPropagation()}
-              onMouseLeave={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (editText.trim() && editText.trim() !== msg.content) onEdit(msg.id, editText.trim());
+                  setEditing(false);
+                }
+                if (e.key === "Escape") { setEditing(false); setEditText(msg.content); }
+              }}
+              rows={1}
             />
             <button type="submit" className={styles.editSaveBtn}>SAVE</button>
             <button

@@ -257,3 +257,17 @@
   background: var(--primary-glow);
   border-color: var(--primary);
 }
+
+.textInput {
+  flex: 1;
+  padding: 0.65rem 0;
+  background: transparent;
+  border: none;
+  font-size: 0.9rem;
+  color: var(--primary);
+  font-family: 'Share Tech Mono', monospace;
+  outline: none;
+  resize: none;
+  overflow-y: hidden;
+  line-height: 1.4;
+}
