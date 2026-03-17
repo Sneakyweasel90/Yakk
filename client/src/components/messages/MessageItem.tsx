@@ -3,50 +3,69 @@ import { RoleBadge } from "../ui/RoleBadge";
 import type { GroupedMessage, Reaction } from "../../types";
 import Avatar from "../ui/Avatar";
 import styles from "./MessageItem.module.css";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
-// ── URL auto-linking ──────────────────────────────────────────────────────────
-
-const URL_REGEX = /https?:\/\/[^\s<>"']+/g;
-
-function renderContent(text: string): React.ReactNode[] {
+function renderContent(text: string): React.ReactNode {
   if (text.startsWith("[img]")) {
     const src = text.slice(5);
-    return [
+    return (
       <img
-        key="img"
         src={src}
         alt="attachment"
         className={styles.attachmentImg}
         onClick={() => window.open(src, "_blank")}
       />
-    ];
+    );
   }
 
-  const parts: React.ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  URL_REGEX.lastIndex = 0;
-  while ((match = URL_REGEX.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index));
-    const url = match[0];
-    parts.push(
-      <a
-        key={match.index}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={styles.messageLink}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {url}
-      </a>
-    );
-    last = match.index + url.length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code({ node, className, children, ...props }: any) {
+          const match = /language-(\w+)/.exec(className || "");
+          const isBlock = !props.inline;
+          return isBlock ? (
+            <SyntaxHighlighter
+              style={vscDarkPlus}
+              language={match?.[1] || "text"}
+              PreTag="div"
+              className={styles.codeBlock}
+            >
+              {String(children).replace(/\n$/, "")}
+            </SyntaxHighlighter>
+          ) : (
+            <code className={styles.inlineCode} {...props}>
+              {children}
+            </code>
+          );
+        },
+        a({ href, children }: any) {
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.messageLink}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {children}
+            </a>
+          );
+        },
+        p({ children }: any) {
+          return <span className={styles.mdParagraph}>{children}</span>;
+        },
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
 }
 
 // ── EmojiPicker ────────────────────────────────────────────────────────────────
@@ -310,7 +329,6 @@ export default function MessageItem({
                 />
               )}
             </div>
-
           </div>
         )}
       </div>

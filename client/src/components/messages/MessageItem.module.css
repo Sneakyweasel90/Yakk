@@ -278,3 +278,26 @@
 .emojiBtn:hover {
   background: var(--primary-glow);
 }
+
+/* ── Markdown ────────────────────────────────────────────────────────────── */
+.inlineCode {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85em;
+  color: var(--primary);
+}
+
+.codeBlock {
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  margin: 4px 0;
+  font-size: 0.82rem !important;
+}
+
+.mdParagraph {
+  display: block;
+  margin: 0;
+}
