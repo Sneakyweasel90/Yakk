@@ -6,6 +6,7 @@ import AccountSettings from "../overlays/AccountSettings";
 import DMList from "../dm/DMList";
 import type { OnlineUser, DMConversation, UserRole, UserStatus } from "../../types";
 import styles from "./SidebarFooter.module.css";
+import VoicePanel from "../voice/VoicePanel";
 
 const STATUS_COLORS: Record<UserStatus, string> = { online: "#4ade80", away: "#facc15", dnd: "#f87171" };
 const STATUS_LABELS: Record<UserStatus, string> = { online: "ONLINE", away: "AWAY", dnd: "DO NOT DISTURB" };
@@ -32,6 +33,11 @@ interface SidebarFooterProps {
   currentStatus: UserStatus;
   currentStatusText: string | null;
   onStatusChange: (status: UserStatus, statusText?: string | null) => void;
+  inVoice: boolean;
+  voiceChannel: string | null;
+  leaveVoice: () => void;
+  setMuted: (muted: boolean) => void;
+  setAllParticipantsDeafened: (deafened: boolean) => void;
 }
 
 function UserRow({ nickname, username, avatar, currentStatus, currentStatusText, onClick }: {
@@ -72,6 +78,7 @@ export default function SidebarFooter({
   onlineUsers, dmConversations, dmLoading, activeDMChannel, totalUnread,
   activeTab, onTabChange, onSelectDM,
   currentStatus, currentStatusText, onStatusChange,
+  inVoice, voiceChannel, leaveVoice, setMuted, setAllParticipantsDeafened,
 }: SidebarFooterProps) {
   const { theme } = useTheme();
   const [showThemes, setShowThemes] = useState(false);
@@ -123,6 +130,14 @@ export default function SidebarFooter({
           </button>
         ))}
       </div>
+
+      <VoicePanel
+        inVoice={inVoice}
+        voiceChannel={voiceChannel}
+        leaveVoice={leaveVoice}
+        setMuted={setMuted}
+        setAllParticipantsDeafened={setAllParticipantsDeafened}
+      />
 
       {/* Theme row */}
       <div className={styles.themeRow}>

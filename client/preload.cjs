@@ -6,4 +6,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   close: () => ipcRenderer.send("close"),
   notify: (title, body) => ipcRenderer.send("notify", { title, body }),
   readFile: (filename) => ipcRenderer.invoke("read-file", filename),
+  pttRegister: (key) => ipcRenderer.send("ptt-register", key),
+  pttUnregister: () => ipcRenderer.send("ptt-unregister"),
+  onPttKeydown: (cb) => ipcRenderer.on("ptt-keydown", cb),
+  offPttKeydown: (cb) => ipcRenderer.removeListener("ptt-keydown", cb),
+  onPttKeyup: (cb) => ipcRenderer.on("ptt-keyup", cb),
+  offPttKeyup: (cb) => ipcRenderer.removeListener("ptt-keyup", cb),
 });

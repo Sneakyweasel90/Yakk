@@ -178,6 +178,9 @@ export default function Chat() {
       <div className={styles.body}>
         <ResizableSidebar>
           <Sidebar
+            inVoice={inVoice}
+            setMuted={setMuted}
+            setAllParticipantsDeafened={setAllParticipantsDeafened}
             channel={channel}
             setChannel={handleSelectChannel}
             unreadCounts={unreadCounts}
@@ -261,19 +264,9 @@ export default function Chat() {
           onUsernameClick={(userId, username, el) => setPopover({ userId, username, el })}
           resolveNickname={resolveNickname}
           typers={typers}
-          inVoice={inVoice}
-          voiceChannel={voiceChannel}
-          participants={participants}
-          participantVolumes={participantVolumes}
-          selfVolume={selfVolume}
-          leaveVoice={leaveVoice}
-          setParticipantVolume={setParticipantVolume}
-          setSelfVolume={setSelfVolume}
           send={send}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
-          setAllParticipantsDeafened={setAllParticipantsDeafened}
-          setMuted={setMuted}
         />
 
         <MemberList

@@ -3,11 +3,16 @@ const path = require("path");
 const https = require("https");
 const fs = require("fs");
 const os = require("os");
+const { UiohookKey, uIOhook } = require("uiohook-napi");
 
 const GITHUB_REPO = "Sneakyweasel90/Talko";
+//PPT key global
+const { globalShortcut } = require("electron");
+
 
 let win;
 let progressWin;
+let currentPttKey = null;
 
 const logPath = path.join(os.homedir(), "talko-log.txt");
 function log(msg) {
@@ -67,6 +72,49 @@ function getLatestRelease() {
     }).on("error", reject);
   });
 }
+
+const KEY_MAP = {
+  "Space": UiohookKey.Space,
+  "A": UiohookKey.A, "B": UiohookKey.B, "C": UiohookKey.C,
+  "D": UiohookKey.D, "E": UiohookKey.E, "F": UiohookKey.F,
+  "G": UiohookKey.G, "H": UiohookKey.H, "I": UiohookKey.I,
+  "J": UiohookKey.J, "K": UiohookKey.K, "L": UiohookKey.L,
+  "M": UiohookKey.M, "N": UiohookKey.N, "O": UiohookKey.O,
+  "P": UiohookKey.P, "Q": UiohookKey.Q, "R": UiohookKey.R,
+  "S": UiohookKey.S, "T": UiohookKey.T, "U": UiohookKey.U,
+  "V": UiohookKey.V, "W": UiohookKey.W, "X": UiohookKey.X,
+  "Y": UiohookKey.Y, "Z": UiohookKey.Z,
+  "F1": UiohookKey.F1, "F2": UiohookKey.F2, "F3": UiohookKey.F3,
+  "F4": UiohookKey.F4, "F5": UiohookKey.F5, "F6": UiohookKey.F6,
+  "F7": UiohookKey.F7, "F8": UiohookKey.F8, "F9": UiohookKey.F9,
+  "F10": UiohookKey.F10, "F11": UiohookKey.F11, "F12": UiohookKey.F12,
+};
+
+let pttKeyCode = null;
+
+uIOhook.on("keydown", (e) => {
+  if (pttKeyCode !== null && e.keycode === pttKeyCode) {
+    win?.webContents.send("ptt-keydown");
+  }
+});
+
+uIOhook.on("keyup", (e) => {
+  if (pttKeyCode !== null && e.keycode === pttKeyCode) {
+    win?.webContents.send("ptt-keyup");
+  }
+});
+
+uIOhook.start();
+
+ipcMain.on("ptt-register", (event, key) => {
+  pttKeyCode = KEY_MAP[key] ?? null;
+  log("PTT registered: " + key + " -> " + pttKeyCode);
+});
+
+ipcMain.on("ptt-unregister", () => {
+  pttKeyCode = null;
+});
+
 
 function createProgressWindow() {
   progressWin = new BrowserWindow({
@@ -369,9 +417,42 @@ ipcMain.on("notify", (event, { title, body }) => {
   }
 });
 
+ipcMain.on("ptt-register", (event, key) => {
+  // Unregister old key if any
+  if (currentPttKey) {
+    globalShortcut.unregister(currentPttKey);
+    currentPttKey = null;
+  }
+  if (!key) return;
+
+  // Convert our key format to Electron accelerator format
+  const accelerator = key === "Space" ? "Space" : key;
+
+  try {
+    const success = globalShortcut.register(accelerator, () => {
+      win?.webContents.send("ptt-keydown");
+    });
+    if (success) currentPttKey = accelerator;
+  } catch (e) {
+    log("globalShortcut register failed: " + e.message);
+  }
+});
+
+ipcMain.on("ptt-unregister", () => {
+  if (currentPttKey) {
+    globalShortcut.unregister(currentPttKey);
+    currentPttKey = null;
+  }
+});
+
 process.on("uncaughtException", (err) => {
   log("UNCAUGHT EXCEPTION: " + err.message + "\n" + err.stack);
   dialog.showErrorBox("Unexpected Error", err.message);
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+  uIOhook.stop();
 });
 
 app.whenReady().then(async () => {

@@ -5,6 +5,7 @@ import ChannelList from "./ChannelList";
 import SidebarFooter from "./SidebarFooter";
 import type { OnlineUser, DMConversation, UserStatus } from "../../types";
 import styles from "./Sidebar.module.css";
+import VoicePanel from "../voice/VoicePanel";
 
 interface Props {
   channel: string;
@@ -38,6 +39,9 @@ interface Props {
   currentStatus: UserStatus;
   currentStatusText: string | null;
   onStatusChange: (status: UserStatus, statusText?: string | null) => void;
+  inVoice: boolean;
+  setMuted: (muted: boolean) => void;
+  setAllParticipantsDeafened: (deafened: boolean) => void;
 }
 
 export default function Sidebar({
@@ -47,7 +51,7 @@ export default function Sidebar({
   participants, voiceOccupancy,
   dmConversations, dmLoading, activeDMChannel, totalUnread,
   activeTab, onTabChange, onSelectDM,
-  onTextChannelNamesChange,
+  onTextChannelNamesChange, inVoice, setMuted, setAllParticipantsDeafened,
   currentStatus, currentStatusText, onStatusChange,
 }: Props) {
   const { theme } = useTheme();
@@ -132,6 +136,11 @@ export default function Sidebar({
         currentStatus={currentStatus}
         currentStatusText={currentStatusText}
         onStatusChange={onStatusChange}
+        inVoice={inVoice}
+        voiceChannel={voiceChannel}
+        leaveVoice={leaveVoice}
+        setMuted={setMuted}
+        setAllParticipantsDeafened={setAllParticipantsDeafened}
       />
     </div>
   );

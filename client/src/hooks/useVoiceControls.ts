@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useVoiceSounds } from "./useVoiceSounds";
 
 type VoiceMode = "open" | "ptt";
 
@@ -7,6 +8,7 @@ const STORAGE_KEY_PTT = "yakk_ptt_key";
 const STORAGE_KEY_MODE = "yakk_voice_mode";
 
 export function useVoiceControls(setMuted: (muted: boolean) => void) {
+  const { playMute, playUnmute, playDeafen, playUndeafen } = useVoiceSounds();
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [mode, setMode] = useState<VoiceMode>(
@@ -37,18 +39,28 @@ export function useVoiceControls(setMuted: (muted: boolean) => void) {
     if (isDeafened) {
       setIsDeafened(false);
       setIsMuted(false);
+      playUnmute();
     } else {
-      setIsMuted(prev => !prev);
+      setIsMuted(prev => {
+        const next = !prev;
+        next ? playMute() : playUnmute();
+        return next;
+      });
     }
-  }, [isDeafened]);
+  }, [isDeafened, playMute, playUnmute]);
 
   const toggleDeafen = useCallback(() => {
     setIsDeafened(prev => {
       const next = !prev;
-      if (next) setIsMuted(true);
+      if (next) {
+        setIsMuted(true);
+        playDeafen();
+      } else {
+        playUndeafen();
+      }
       return next;
     });
-  }, []);
+  }, [playDeafen, playUndeafen]);
 
   const toggleMode = useCallback(() => {
     setMode(prev => {
@@ -68,6 +80,29 @@ export function useVoiceControls(setMuted: (muted: boolean) => void) {
     }
     setAssigningKey(null);
   }, []);
+
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.onPttKeydown) return;
+
+    if (mode === "ptt") {
+      api.pttRegister(pttKey);
+    } else {
+      api.pttUnregister();
+      return;
+    }
+
+    const handleDown = () => setIsPttActive(true);
+    const handleUp = () => setIsPttActive(false);
+
+    api.onPttKeydown(handleDown);
+    api.onPttKeyup(handleUp);
+
+    return () => {
+      api.offPttKeydown(handleDown);
+      api.offPttKeyup(handleUp);
+    };
+  }, [mode, pttKey]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -113,8 +148,9 @@ export function useVoiceControls(setMuted: (muted: boolean) => void) {
     setIsDeafened(false);
     setIsPttActive(false);
     setAssigningKey(null);
+    (window as any).electronAPI?.pttUnregister?.();
   }, []);
-
+  
   return {
     isMuted: effectiveMuted,
     isDeafened,

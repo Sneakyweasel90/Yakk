@@ -2,7 +2,6 @@ import ChannelHeader from "./ChannelHeader";
 import MessageFeed from "./MessageFeed";
 import DMHeader from "../dm/DMHeader";
 import TypingIndicator from "../messages/TypingIndicator";
-import VoiceIndicator from "../voice/VoiceIndicator";
 import MessageInput from "../messages/MessageInput";
 import type { RefObject } from "react";
 import type { GroupedMessage, DMConversation, OnlineUser } from "../../types";
@@ -37,19 +36,9 @@ interface Props {
   onUsernameClick: (userId: number, username: string, el: HTMLElement) => void;
   resolveNickname: (userId: number, username: string) => string;
   typers: Record<string, string>;
-  inVoice: boolean;
-  voiceChannel: string | null;
-  participants: string[];
-  participantVolumes: Record<string, number>;
-  selfVolume: number;
-  leaveVoice: () => void;
-  setParticipantVolume: (username: string, volume: number) => void;
-  setSelfVolume: (volume: number) => void;
   send: (data: object) => void;
   replyTo: GroupedMessage | null;
   onCancelReply: () => void;
-  setAllParticipantsDeafened: (deafened: boolean) => void;
-  setMuted: (muted: boolean) => void;
 }
 
 export default function ChatMain({
@@ -60,10 +49,8 @@ export default function ChatMain({
   hoveredMsgId, pickerMsgId, currentUsername, currentUserId, avatarMap,
   onScroll, onHover, onPickerToggle, onReact, onReply, onEdit, onDelete,
   onUsernameClick, resolveNickname,
-  typers, setAllParticipantsDeafened,
-  inVoice, voiceChannel, participants, participantVolumes, selfVolume, setSelfVolume,
+  typers,
   send, replyTo, onCancelReply,
-  leaveVoice, setMuted, setParticipantVolume,
 }: Props) {
   return (
     <div className={styles.root}>
@@ -106,21 +93,6 @@ export default function ChatMain({
       />
 
       <TypingIndicator typers={Object.values(typers)} />
-
-      {inVoice && (
-        <VoiceIndicator
-          inVoice={inVoice}
-          voiceChannel={voiceChannel}
-          participants={participants}
-          participantVolumes={participantVolumes}
-          selfVolume={selfVolume}
-          leaveVoice={leaveVoice}
-          setParticipantVolume={setParticipantVolume}
-          setSelfVolume={setSelfVolume}
-          setAllParticipantsDeafened={setAllParticipantsDeafened}
-          setMuted={setMuted}
-        />
-      )}
 
       <MessageInput
         send={send}

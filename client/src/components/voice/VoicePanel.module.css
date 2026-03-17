@@ -1,0 +1,131 @@
+.root {
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface2);
+  flex-shrink: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #23a55a;
+  box-shadow: 0 0 6px #23a55a;
+  flex-shrink: 0;
+}
+
+.statusText {
+  font-size: 0.55rem;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: 0.12em;
+  color: #23a55a;
+}
+
+.channelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.channelName {
+  font-size: 0.65rem;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--text);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pttBadge {
+  font-size: 0.55rem;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+}
+
+.pttActive {
+  color: #23a55a;
+  border-color: #23a55a;
+  background: rgba(35, 165, 90, 0.1);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.iconBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.iconBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.iconBtn:hover {
+  background: var(--primary-glow);
+  color: var(--primary);
+}
+
+.iconBtnDanger {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.15);
+}
+
+.iconBtnDanger:hover {
+  background: rgba(248, 113, 113, 0.25);
+  color: #f87171;
+}
+
+.iconBtnActive {
+  color: var(--primary);
+  background: var(--primary-glow);
+}
+
+.iconBtnDisconnect {
+  margin-left: auto;
+  color: #f87171;
+  background: transparent;
+}
+
+.iconBtnDisconnect:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.hidden {
+  display: none;
+}
+
+.pttKeyLabel {
+  font-size: 0.55rem;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}

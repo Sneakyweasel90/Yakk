@@ -1,7 +1,7 @@
 {
   "name": "talko",
   "private": true,
-  "version": "1.13.0",
+  "version": "1.13.1",
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
@@ -20,7 +20,8 @@
     "asar": true,
     "asarUnpack": [
       "dist/*.wasm",
-      "dist/workletProcessor.js"
+      "dist/workletProcessor.js",
+       "node_modules/uiohook-napi/**"
     ],
     "directories": {
       "output": "dist_electron"
@@ -42,7 +43,9 @@
       "dist/**/*",
       "electron.cjs",
       "preload.cjs"
-    ]
+    ],
+    "npmRebuild": true,
+    "buildDependenciesFromSource": false
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.20",
@@ -51,7 +54,8 @@
     "livekit-client": "^2.17.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.13.1"
+    "react-router-dom": "^7.13.1",
+    "uiohook-napi": "^1.5.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
