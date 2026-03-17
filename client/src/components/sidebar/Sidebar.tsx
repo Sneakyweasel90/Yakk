@@ -3,7 +3,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { useChannels } from "../../hooks/useChannels";
 import ChannelList from "./ChannelList";
 import SidebarFooter from "./SidebarFooter";
-import type { OnlineUser, DMConversation, UserStatus, Channel } from "../../types";
+import type { OnlineUser, DMConversation, UserStatus } from "../../types";
 import styles from "./Sidebar.module.css";
 
 interface Props {
@@ -42,7 +42,6 @@ interface Props {
   setMuted: (muted: boolean) => void;
   setAllParticipantsDeafened: (deafened: boolean) => void;
   joinAfk: () => void;
-  afkChannel: Channel | null;
 }
 
 export default function Sidebar({
@@ -53,7 +52,7 @@ export default function Sidebar({
   dmConversations, dmLoading, activeDMChannel, totalUnread,
   activeTab, onTabChange, onSelectDM,
   onTextChannelNamesChange, inVoice, setMuted, setAllParticipantsDeafened,
-  currentStatus, currentStatusText, onStatusChange, afkChannel, joinAfk,
+  currentStatus, currentStatusText, onStatusChange, joinAfk,
 }: Props) {
   const { theme } = useTheme();
   const {
@@ -61,7 +60,7 @@ export default function Sidebar({
     newChannelName, setNewChannelName, creating,
     showCreateText, showCreateVoice,
     createChannel, deleteChannel,
-    toggleCreateText, toggleCreateVoice, cancelCreate,
+    toggleCreateText, toggleCreateVoice, cancelCreate, afkChannel,
   } = useChannels(token);
 
   useEffect(() => {
@@ -111,8 +110,8 @@ export default function Sidebar({
             onCancelCreate={cancelCreate}
             voiceOccupancy={voiceOccupancy}
             unreadCounts={unreadCounts}
-            afkChannel={afkChannel}
             onJoinAfk={joinAfk}
+            afkChannel={afkChannel}
           />
         </div>
       )}
