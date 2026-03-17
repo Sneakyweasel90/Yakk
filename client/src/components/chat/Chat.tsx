@@ -289,6 +289,7 @@ export default function Chat() {
 
         <MemberList
           onlineUsers={onlineUsers}
+          allUsers={allUsers}  
           currentUserId={user!.id}
           onUserClick={(userId, username, el) => setPopover({ userId, username, el })}
         />
